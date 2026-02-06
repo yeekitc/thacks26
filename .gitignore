@@ -1,0 +1,43 @@
+# Compiled archives
+*.tar
+*.tar.gz
+*.tar.br
+*.tar.zst
+
+# Extraction directory
+extracted/
+
+# Build artifacts and generated files
+build/
+dist/
+*.tar
+*.tar.gz
+*.tar.br
+*.tar.zst
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Node (if you use any build tools)
+node_modules/
+package-lock.json
+
+# Python cache (from the HTTP server)
+__pycache__/
+*.pyc
+
+# Temporary files
+tmp/
+temp/
+.cache/

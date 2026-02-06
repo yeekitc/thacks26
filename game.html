@@ -1,0 +1,150 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"><style>
+*{margin:0;padding:0;overflow:hidden}
+body{background:#000;touch-action:none}
+canvas{display:block;margin:0 auto;background:#001}
+</style></head><body><canvas id=c></canvas><script>
+// Init
+let c=document.getElementById('c'),x=c.getContext('2d'),W=320,H=480;
+c.width=W;c.height=H;
+
+// Audio
+let A=new AudioContext(),snd=(f,d)=>{let o=A.createOscillator();o.frequency.value=f;o.connect(A.destination);o.start();o.stop(A.currentTime+d)};
+
+// Player
+let p={x:160,y:400,w:20,h:20,s:5,hp:3,sc:0};
+
+// Arrays
+let b=[],e=[],ps=[];
+
+// Enemies spawn
+let et=0,spawn=()=>{
+  if(et++%60==0)e.push({x:Math.random()*(W-20),y:-20,w:20,h:20,s:2,hp:1});
+};
+
+// Shoot
+let shoot=()=>{
+  b.push({x:p.x+8,y:p.y,w:4,h:10,s:8});
+  snd(800,.05);
+};
+
+// Touch
+let tx=0;
+c.ontouchstart=c.ontouchmove=ev=>{
+  ev.preventDefault();
+  let t=ev.touches[0];
+  tx=t.clientX-c.offsetLeft;
+};
+c.ontouchend=()=>tx=0;
+
+// Click to shoot
+c.onclick=shoot;
+setInterval(shoot,300);
+
+// Collision
+let hit=(a,b)=>a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;
+
+// Particle
+let addP=(x,y,c)=>{
+  for(let i=0;i<5;i++)ps.push({x:x,y:y,vx:(Math.random()-.5)*4,vy:(Math.random()-.5)*4,c:c,t:20});
+};
+
+// Game loop
+let loop=()=>{
+  // Move player
+  if(tx>0){
+    let dx=tx-p.x-10;
+    p.x+=dx*.1;
+  }
+  
+  // Update bullets
+  for(let i=b.length-1;i>=0;i--){
+    b[i].y-=b[i].s;
+    if(b[i].y<0)b.splice(i,1);
+  }
+  
+  // Update enemies
+  for(let i=e.length-1;i>=0;i--){
+    e[i].y+=e[i].s;
+    if(e[i].y>H)e.splice(i,1);
+    
+    // Hit player
+    if(hit(p,e[i])){
+      p.hp--;
+      addP(p.x+10,p.y+10,'#f00');
+      e.splice(i,1);
+      snd(200,.2);
+      if(p.hp<=0){
+        alert('Game Over! Score: '+p.sc);
+        location.reload();
+      }
+    }
+  }
+  
+  // Bullet hit enemy
+  for(let i=b.length-1;i>=0;i--){
+    for(let j=e.length-1;j>=0;j--){
+      if(hit(b[i],e[j])){
+        p.sc+=10;
+        addP(e[j].x+10,e[j].y+10,'#0f0');
+        b.splice(i,1);
+        e.splice(j,1);
+        snd(600,.1);
+        break;
+      }
+    }
+  }
+  
+  // Update particles
+  for(let i=ps.length-1;i>=0;i--){
+    let pt=ps[i];
+    pt.x+=pt.vx;
+    pt.y+=pt.vy;
+    pt.t--;
+    if(pt.t<=0)ps.splice(i,1);
+  }
+  
+  spawn();
+  
+  // Draw
+  x.fillStyle='#001';
+  x.fillRect(0,0,W,H);
+  
+  // Stars background
+  for(let i=0;i<50;i++){
+    x.fillStyle='#fff';
+    x.fillRect((i*37)%W,(i*73+et*2)%H,1,1);
+  }
+  
+  // Player
+  x.fillStyle='#0ff';
+  x.fillRect(p.x,p.y,p.w,p.h);
+  x.fillStyle='#fff';
+  x.fillRect(p.x+8,p.y-5,4,5);
+  
+  // Bullets
+  x.fillStyle='#ff0';
+  b.forEach(v=>x.fillRect(v.x,v.y,v.w,v.h));
+  
+  // Enemies
+  x.fillStyle='#f0f';
+  e.forEach(v=>{
+    x.fillRect(v.x,v.y,v.w,v.h);
+    x.fillRect(v.x+5,v.y+20,10,5);
+  });
+  
+  // Particles
+  ps.forEach(v=>{
+    x.fillStyle=v.c;
+    x.fillRect(v.x,v.y,2,2);
+  });
+  
+  // HUD
+  x.fillStyle='#fff';
+  x.font='16px monospace';
+  x.fillText('Score: '+p.sc,10,20);
+  x.fillText('HP: '+p.hp,10,40);
+  
+  requestAnimationFrame(loop);
+};
+loop();
+</script></body></html>
