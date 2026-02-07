@@ -1811,9 +1811,11 @@ function update(dt){
       tutorialTimer+=dt;
     }
     ensureWorld(player.x+W+1200);
-    const gy=groundY(player.x)||320;
-    camX+=(player.x-W*0.33-camX)*Math.min(1,dt*3.2);
-    camY+=(gy-BUGGY.rideHeight-H*camFollowY-camY)*Math.min(1,dt*3);
+    if(mode!=='over'){
+      const gy=groundY(player.x)||320;
+      camX+=(player.x-W*0.33-camX)*Math.min(1,dt*3.2);
+      camY+=(gy-BUGGY.rideHeight-H*camFollowY-camY)*Math.min(1,dt*3);
+    }
     for(let i=particles.length-1;i>=0;i--){
       const p=particles[i];
       p.life-=dt;
