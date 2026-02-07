@@ -1133,9 +1133,9 @@ function drawActionTutorialPanel(){
   g.lineWidth=1.5;
   g.stroke();
 
-  const gy=sy+sh*0.72;
+  const gy=sy+sh*0.85;
   g.fillStyle='rgba(84,60,39,.9)';
-  roundRect(sx+4,gy,sw-8,sh-(gy-sy)-4,8);g.fill();
+  roundRect(sx+4,gy,sw-8,sh-(gy-sy)-2,8);g.fill();
   g.strokeStyle='rgba(35,23,14,.6)';
   g.lineWidth=1.2;
   g.beginPath();
@@ -1143,15 +1143,15 @@ function drawActionTutorialPanel(){
   g.lineTo(sx+sw-8,gy+1);
   g.stroke();
 
-  const px=sx+sw*0.28;
-  const hx=sx+sw*0.72;
+  const px=sx+sw*0.22;
+  const hx=sx+sw*0.78;
   drawPusherFigure(camX+px,camY+gy+2,{wave:0.1});
   drawPotholeSpriteScreen(hx,gy+4,{r:Math.max(14,sw*0.032),ang:-0.08});
 
   g.fillStyle='rgba(240,246,252,.92)';
   g.font='700 10px system-ui,sans-serif';
-  g.fillText('PUSHER: ACTION collects it',px,sy+sh-8);
-  g.fillText('POTHOLE: ACTION swerves it',hx,sy+sh-8);
+  g.fillText('PUSHER: ACTION collects it',px,gy+20);
+  g.fillText('POTHOLE: ACTION swerves it',hx,gy+20);
   g.textAlign='left';
 }
 
@@ -1360,8 +1360,8 @@ function tutorialFocusKey(){
 }
 
 function getSkipRect(){
-  const w=Math.round(clamp(W*0.54,288,372));
-  const h=102;
+  const w=Math.round(clamp(W*0.24,140,180));
+  const h=68;
   return {x:W-w-16,y:12,w,h,r:h*0.5};
 }
 
@@ -1750,7 +1750,7 @@ function render(){
       g.stroke();
       g.textAlign='center';
       g.fillStyle='#dbe6f2';
-      g.font='800 42px system-ui,sans-serif';
+      g.font='800 28px system-ui,sans-serif';
       g.fillText('SKIP \u25B6',s.x+s.w*0.5,s.y+s.h*0.62);
     }
     g.textAlign='left';
