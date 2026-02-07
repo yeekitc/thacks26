@@ -6,27 +6,40 @@ const CAM_FOLLOW_Y=0.50; // was 0.58; shows ~20% more terrain below the buggy
 const ACCEL_SCALE=0.85;
 const DECEL_SCALE=1.20;
 const MAX_SPEED=460; // ~15% lower than previous 541 cap
+const BOOST_MAX_MULT=1.30;
+const BOOST_RECOVER_TIME=0.52;
+const BOOST_RECOVER_DECEL=980;
 const SLOPE_GRAVITY=286; // slightly softer downhill pull from terrain slope
 const PUSHER_RUN=0.5;
 const TAU=Math.PI*2;
+const BUGGY={
+  rideHeight:11,      // distance from buggy origin to wheel-ground contact
+  frontProbe:24,      // forward collision probe for wall impacts
+  airGravity:720,
+  wallSlack:2,
+  maxLandVY:298,
+  maxLandDrop:214,
+  maxBodyErr:0.95,
+  maxImpactErr:0.86
+};
 const GEN={
   pot:{start:920,min:780,max:1280,jitter:36,step:42,maxTries:18,clear:220,maxSlope:0.55,gapPad:90},
   npc:{start:340,min:430,max:860,jitter:48,step:36,maxTries:20,clear:190,maxSlope:0.42,gapPad:95},
   bridge:{
     start:1550,safeStart:2500,chance:0.20,min:1700,max:2900,
-    approachLen:[130,220],approachSlope:[0.10,0.18],
-    rampLen:[70,115],rampSlope:[0.22,0.32],
-    lipLen:[20,34],lipSlope:[0.03,0.08],
-    width:[120,220],btmDrop:[220,360],landDrop:[18,32],
-    settleLen1:[110,180],settleSlope1:[0.06,0.14],
-    settleLen2:[180,280],settleSlope2:[0.12,0.20]
+    approachLen:[180,320],approachSlope:[-0.20,-0.11],
+    rampLen:[120,220],rampSlope:[-0.30,-0.18],
+    lipLen:[10,24],lipSlope:[-0.30,-0.18],
+    width:[120,230],btmDrop:[220,380],landDrop:[10,22],
+    settleLen1:[220,360],settleSlope1:[0.03,0.07],
+    settleLen2:[300,520],settleSlope2:[0.04,0.09]
   },
   terrain:{lenMin:150,lenMax:275,min:-0.08,max:0.78,flatCut:0.14,flatLimit:2,maxRisePerSeg:22,maxRiseFromDeep:96}
 };
 const btn={call:{x:0,y:0,r:0,active:0,label:'CALL PUSHER'},brake:{x:0,y:0,r:0,active:0,label:'BRAKE'},act:{x:0,y:0,r:0,active:0,label:'ACTION',disabled:true}};
 const brakePointers=new Set();
 let actPulse=0; // expanding ring timer when action becomes available
-const btnFloats=[]; // floating text items rising from action button
+const centerCues=[];
 let ac=null,master=null;
 let mode='title',reason='';
 let tNow=0,score=0,best=0,startX=0,newBest=0;
@@ -48,11 +61,10 @@ const player={
   x:80,y:0,vx:0,vy:0,speed:68,
   on:1,ang:0,airY:0,stall:0,
   have:0,boost:0,swerve:0,maxHave:5,potholeDip:0,potholeSlow:0,
-  pusherIncoming:0,pusherStartX:0
+  pusherIncoming:0,pusherStartX:0,boostCarry:0
 };
 
 const particles=[];
-const textDisplays=[];
 const safeProbe=document.createElement('div');
 safeProbe.style.cssText='position:fixed;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);pointer-events:none;visibility:hidden;width:0;height:0';
 document.body.appendChild(safeProbe);
@@ -120,6 +132,75 @@ function sfx(name){
 }
 
 function rr(a,b){return a+Math.random()*(b-a)}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function lerp(a,b,t){return a+(b-a)*t}
+function easeOutBack(t){
+  const c1=1.70158,c3=c1+1;
+  return 1+c3*Math.pow(t-1,3)+c1*Math.pow(t-1,2);
+}
+function easeInBack(t){
+  const c1=1.70158,c3=c1+1;
+  return c3*t*t*t-c1*t*t;
+}
+function queueCenterCue(text,opt){
+  const s=(text==null?'':String(text)).trim();
+  if(!s) return;
+  const o=opt||{};
+  centerCues.push({
+    text:s.toUpperCase(),
+    t:0,
+    dur:o.dur||1.04,
+    size:o.size||28,
+    weight:o.weight||800,
+    col:o.col||'#fff',
+    stroke:o.stroke||'rgba(0,0,0,0.62)'
+  });
+  if(centerCues.length>7) centerCues.splice(0,centerCues.length-7);
+}
+function updateCenterCues(dt){
+  for(let i=centerCues.length-1;i>=0;i--){
+    const m=centerCues[i];
+    m.t+=dt;
+    if(m.t>=m.dur) centerCues.splice(i,1);
+  }
+}
+function drawCenterCues(){
+  if(!centerCues.length) return;
+  const cx=W*0.5,cy=H*0.5;
+  g.textAlign='center';
+  for(let i=0;i<centerCues.length;i++){
+    const m=centerCues[i];
+    const p=clamp(m.t/(m.dur||1),0,1);
+    let scale=1;
+    if(p<0.2){
+      scale=lerp(0.34,1.22,easeOutBack(p/0.2));
+    }else if(p<0.45){
+      const k=(p-0.2)/0.25;
+      scale=1+Math.sin(k*TAU*2.4)*0.08*(1-k);
+    }else if(p>0.82){
+      scale=lerp(1,0.32,easeInBack((p-0.82)/0.18));
+    }
+    let alpha=0.8; // 20% transparent baseline
+    if(p<0.12) alpha*=p/0.12;
+    else if(p>0.82) alpha*=Math.max(0,1-(p-0.82)/0.18);
+    const sz=Math.max(28,m.size*2);
+    const y=cy-(centerCues.length-1-i)*Math.max(34,sz*0.62);
+    g.save();
+    g.translate(cx,y);
+    g.scale(scale,scale);
+    g.globalAlpha=alpha;
+    g.font='italic '+m.weight+' '+Math.round(sz)+'px system-ui,sans-serif';
+    g.lineWidth=Math.max(4,sz*0.1);
+    g.lineJoin='round';
+    g.strokeStyle=m.stroke;
+    g.strokeText(m.text,0,0);
+    g.fillStyle=m.col;
+    g.fillText(m.text,0,0);
+    g.restore();
+  }
+  g.globalAlpha=1;
+  g.textAlign='left';
+}
 
 function nearGap(x,pad){
   const a=world.gaps;
@@ -158,6 +239,14 @@ function groundY(x){
   const p1=p[i],p2=p[i+1];
   const t=(x-p1.x)/(p2.x-p1.x||1);
 
+  if(p1.k||p2.k){
+    const dx=p2.x-p1.x||1;
+    const s1=pointSlope(i),s2=pointSlope(i+1);
+    const m1=s1*dx,m2=s2*dx;
+    const t2=t*t,t3=t2*t;
+    return (2*t3-3*t2+1)*p1.y + (t3-2*t2+t)*m1 + (-2*t3+3*t2)*p2.y + (t3-t2)*m2;
+  }
+
   // Catmull-Rom spline for smooth curves
   const p0=p[Math.max(0,i-1)];
   const p3=p[Math.min(p.length-1,i+2)];
@@ -176,6 +265,14 @@ function slopeAt(x){
   const p1=p[i],p2=p[i+1];
   const t=(x-p1.x)/(p2.x-p1.x||1);
 
+  if(p1.k||p2.k){
+    const dx=p2.x-p1.x||1;
+    const s1=pointSlope(i),s2=pointSlope(i+1);
+    const m1=s1*dx,m2=s2*dx;
+    const dydt=(6*t*t-6*t)*p1.y + (3*t*t-4*t+1)*m1 + (-6*t*t+6*t)*p2.y + (3*t*t-2*t)*m2;
+    return dydt/dx;
+  }
+
   // Derivative of Catmull-Rom spline for smooth slope
   const p0=p[Math.max(0,i-1)];
   const p3=p[Math.min(p.length-1,i+2)];
@@ -188,8 +285,71 @@ function slopeAt(x){
   return dydt/dx;
 }
 
-function addPoint(x,y){
-  world.pts.push({x,y});
+function pointSlope(i){
+  const p=world.pts;
+  const c=p[i];
+  if(c&&c.s!=null) return c.s;
+  const a=p[Math.max(0,i-1)];
+  const b=p[Math.min(p.length-1,i+1)];
+  return (b.y-a.y)/(b.x-a.x||1);
+}
+
+function findGapWallHit(prevX,prevY,nextX,nextY){
+  const prevFront=prevX+BUGGY.frontProbe;
+  const nextFront=nextX+BUGGY.frontProbe;
+  if(nextFront<=prevFront) return null;
+  for(let i=0;i<world.gaps.length;i++){
+    const q=world.gaps[i];
+    if(prevFront>q.b||nextFront<q.b) continue;
+    const t=(q.b-prevFront)/(nextFront-prevFront||1);
+    if(t<0||t>1) continue;
+    const yHit=lerp(prevY,nextY,t);
+    const lip=(groundY(q.b)||q.btm)-BUGGY.rideHeight;
+    if(yHit>lip+BUGGY.wallSlack){
+      return {x:q.b,y:yHit,q};
+    }
+  }
+  return null;
+}
+
+function findGroundTouch(prevX,prevY,nextX,nextY){
+  const dx=nextX-prevX;
+  if(Math.abs(dx)<1e-6){
+    const gy=groundY(nextX);
+    if(gy==null||nextY<gy-BUGGY.rideHeight) return null;
+    return {x:nextX,y:gy-BUGGY.rideHeight,gy,slope:slopeAt(nextX)};
+  }
+  const steps=Math.max(4,Math.ceil(Math.abs(dx)/3));
+  let t0=0;
+  for(let s=1;s<=steps;s++){
+    const t1=s/steps;
+    const x1=lerp(prevX,nextX,t1),y1=lerp(prevY,nextY,t1);
+    const gy1=groundY(x1);
+    if(gy1!=null&&y1>=gy1-BUGGY.rideHeight){
+      let lo=t0,hi=t1;
+      for(let k=0;k<7;k++){
+        const m=(lo+hi)*0.5;
+        const mx=lerp(prevX,nextX,m),my=lerp(prevY,nextY,m);
+        const mgy=groundY(mx);
+        if(mgy!=null&&my>=mgy-BUGGY.rideHeight) hi=m;
+        else lo=m;
+      }
+      const hitT=hi;
+      const hitX=lerp(prevX,nextX,hitT);
+      const gy=groundY(hitX);
+      if(gy==null) return null;
+      return {x:hitX,y:gy-BUGGY.rideHeight,gy,slope:slopeAt(hitX)};
+    }
+    t0=t1;
+  }
+  return null;
+}
+
+function addPoint(x,y,s,k){
+  const pt={x,y};
+  if(s!=null) pt.s=s;
+  if(k) pt.k=1;
+  world.pts.push(pt);
   world.lastX=x;world.lastY=y;
   world.deepY=Math.max(world.deepY,y);
 }
@@ -276,33 +436,78 @@ function ensureWorld(toX){
   while(world.lastX<toX){
     const x0=world.lastX,y0=world.lastY;
     if(x0>world.nextGap&&x0>bc.safeStart&&Math.random()<bc.chance){
-      const approach=rr(bc.approachLen[0],bc.approachLen[1]);
-      const approachSlope=rr(bc.approachSlope[0],bc.approachSlope[1]);
+      const lastI=world.pts.length-1;
+      if(lastI>0){
+        const prev=world.pts[lastI-1];
+        world.pts[lastI].s=(y0-prev.y)/(x0-prev.x||1);
+      }
+      const gapW=rr(bc.width[0],bc.width[1]);
+      const gapT=clamp((gapW-bc.width[0])/(bc.width[1]-bc.width[0]||1),0,1);
+
+      const approach=rr(
+        lerp(bc.approachLen[0]*0.78,bc.approachLen[0],gapT),
+        lerp(bc.approachLen[1]*1.02,bc.approachLen[1]*1.42,gapT)
+      );
+      const approachSlope=rr(
+        lerp(bc.approachSlope[0]*0.72,bc.approachSlope[0]*0.96,gapT),
+        lerp(bc.approachSlope[1]*0.88,bc.approachSlope[1]*1.42,gapT)
+      );
       const x1=x0+approach,y1=y0+approach*approachSlope;
-      addPoint(x1,y1);
-      const rampLen=rr(bc.rampLen[0],bc.rampLen[1]);
-      const rampSlope=rr(bc.rampSlope[0],bc.rampSlope[1]);
+      addPoint(x1,y1,approachSlope,1);
+      const rampLen=rr(
+        lerp(bc.rampLen[0]*0.82,bc.rampLen[0],gapT),
+        lerp(bc.rampLen[1]*1.04,bc.rampLen[1]*1.56,gapT)
+      );
+      const rampSlope=rr(
+        lerp(bc.rampSlope[0]*0.76,bc.rampSlope[0]*1.02,gapT),
+        lerp(bc.rampSlope[1]*0.88,bc.rampSlope[1]*1.48,gapT)
+      );
       const x2=x1+rampLen,y2=y1+rampLen*rampSlope;
-      addPoint(x2,y2);
-      const lipLen=rr(bc.lipLen[0],bc.lipLen[1]);
-      const lipSlope=rr(bc.lipSlope[0],bc.lipSlope[1]);
+      addPoint(x2,y2,rampSlope,1);
+      const lipLen=rr(
+        lerp(bc.lipLen[0]*0.9,bc.lipLen[0],gapT),
+        lerp(bc.lipLen[1]*1.0,bc.lipLen[1]*1.18,gapT)
+      );
+      // Keep takeoff as a true ramp cutoff: no flattening cap near the edge.
+      const lipSlope=rampSlope;
       const takeoffX=x2+lipLen,takeoffY=y2+lipLen*lipSlope;
-      addPoint(takeoffX,takeoffY);
-      const gw=rr(bc.width[0],bc.width[1]);
-      world.gaps.push({a:takeoffX,b:takeoffX+gw,btm:takeoffY+rr(bc.btmDrop[0],bc.btmDrop[1]),river:Math.random()<0.5,seed:Math.random()});
-      const landX=takeoffX+gw;
-      const landY=takeoffY+rr(bc.landDrop[0],bc.landDrop[1]);  
-      addPoint(landX,landY);
-      const downLen1=rr(bc.settleLen1[0],bc.settleLen1[1]);
-      const downSlope1=rr(bc.settleSlope1[0],bc.settleSlope1[1]);
+      addPoint(takeoffX,takeoffY,lipSlope,1);
+      const gapBottom=takeoffY+rr(
+        lerp(bc.btmDrop[0]*0.9,bc.btmDrop[0]*1.04,gapT),
+        lerp(bc.btmDrop[1]*0.95,bc.btmDrop[1]*1.24,gapT)
+      );
+      world.gaps.push({
+        a:takeoffX,b:takeoffX+gapW,btm:gapBottom,river:Math.random()<0.5,seed:Math.random(),
+        w:gapW,t:gapT
+      });
+      const downSlope1=rr(
+        lerp(bc.settleSlope1[0]*0.66,bc.settleSlope1[0]*0.9,gapT),
+        lerp(bc.settleSlope1[1]*0.78,bc.settleSlope1[1]*1.06,gapT)
+      );
+      const downSlope2=rr(
+        lerp(bc.settleSlope2[0]*0.68,bc.settleSlope2[0]*0.92,gapT),
+        lerp(bc.settleSlope2[1]*0.8,bc.settleSlope2[1]*1.1,gapT)
+      );
+      const landX=takeoffX+gapW;
+      const landY=takeoffY+rr(
+        lerp(bc.landDrop[0]*1.2,bc.landDrop[0]*0.72,gapT),
+        lerp(bc.landDrop[1]*1.26,bc.landDrop[1]*0.82,gapT)
+      );
+      addPoint(landX,landY,downSlope1,1);
+      const downLen1=rr(
+        lerp(bc.settleLen1[0]*0.84,bc.settleLen1[0],gapT),
+        lerp(bc.settleLen1[1]*1.04,bc.settleLen1[1]*1.42,gapT)
+      );
       const down1X=landX+downLen1,down1Y=landY+downLen1*downSlope1;
-      addPoint(down1X,down1Y);
-      const downLen2=rr(bc.settleLen2[0],bc.settleLen2[1]);
-      const downSlope2=rr(bc.settleSlope2[0],bc.settleSlope2[1]);
+      addPoint(down1X,down1Y,(downSlope1+downSlope2)*0.5,1);
+      const downLen2=rr(
+        lerp(bc.settleLen2[0]*0.84,bc.settleLen2[0],gapT),
+        lerp(bc.settleLen2[1]*1.05,bc.settleLen2[1]*1.5,gapT)
+      );
       const down2X=down1X+downLen2,down2Y=down1Y+downLen2*downSlope2;
-      addPoint(down2X,down2Y);
+      addPoint(down2X,down2Y,downSlope2,1);
       world.lastX=down2X;world.lastY=down2Y;
-      world.nextGap=down2X+rr(bc.min,bc.max);
+      world.nextGap=down2X+rr(bc.min,bc.max)+gapW*0.22;
       world.terrain.hold=0;world.terrain.modeLeft=0;world.terrain.flat=0;
     }else{
       const len=rr(GEN.terrain.lenMin,GEN.terrain.lenMax);
@@ -335,11 +540,11 @@ function resetRun(){
   world.nextPot=GEN.pot.start;world.nextNpc=GEN.npc.start;world.nextGap=GEN.bridge.start;
   world.terrain.slope=0.32;world.terrain.target=0.40;world.terrain.hold=0;world.terrain.flat=0;world.terrain.mode='flow';world.terrain.modeLeft=0;
   player.x=80;player.speed=68;player.vx=0;player.vy=0;player.on=1;player.ang=0;
-  player.have=0;player.boost=0;player.swerve=0;player.airY=0;player.stall=0;player.potholeDip=0;player.potholeSlow=0;player.pusherIncoming=0;player.pusherStartX=0;
-  btnFloats.length=0;actPulse=0;
+  player.have=0;player.boost=0;player.swerve=0;player.airY=0;player.stall=0;player.potholeDip=0;player.potholeSlow=0;player.pusherIncoming=0;player.pusherStartX=0;player.boostCarry=0;
+  centerCues.length=0;actPulse=0;
   ensureWorld(player.x+2200);
   const gy=groundY(player.x)||320;
-  player.y=gy-16;
+  player.y=gy-BUGGY.rideHeight;
   camX=player.x-W*0.33;camY=player.y-H*CAM_FOLLOW_Y;
   startX=player.x;
 }
@@ -367,8 +572,7 @@ function endRun(msg,crash){
 }
 
 function failInput(){
-  const gy=groundY(player.x);
-  textDisplays.push({x:player.x,y:(gy==null?player.y+16:gy)-46,text:'Fail!',time:0.72,col:'#ff5757',stroke:'rgba(70,0,0,0.65)'});
+  queueCenterCue('FAIL!',{dur:0.86,size:30,col:'#ff6b6b',stroke:'rgba(70,0,0,0.65)'});
   player.speed*=0.7;
   if(!player.on) player.vx=Math.max(10,player.vx*0.7);
   sfx('hit');
@@ -393,14 +597,14 @@ function tryAction(){
   if(nearNpc&&(!nearPot||dN<=dP)){
     if(player.have<player.maxHave){
       nearNpc.got=1;player.have++;sfx('collect');
-      btnFloats.push({text:'+1 PUSHER',time:0.9,max:0.9,col:'#b8e6ff'});
+      queueCenterCue('+1 PUSHER',{dur:0.96,size:28,col:'#b8e6ff'});
     }
     return;
   }
   if(nearPot){
     nearPot.dodge=1;nearPot.flash=0.22;player.swerve=0.28;
     sfx('swerve');burst(nearPot.x,groundY(nearPot.x)-8,8,'#aad0ef',90);
-    btnFloats.push({text:'SWERVED!',time:0.9,max:0.9,col:'#ffe08f'});
+    queueCenterCue('SWERVED!',{dur:0.96,size:29,col:'#ffe08f'});
     return;
   }
   failInput();
@@ -410,6 +614,7 @@ function tryCall(){
   if(mode!=='play') return;
   if(player.have<=0){failInput();return;}
   if(player.boost<=0&&player.pusherIncoming<=0){
+    queueCenterCue(btn.call.label,{dur:0.88,size:24,col:'#b8e6ff'});
     player.have--;
     player.pusherIncoming=PUSHER_RUN;
     player.pusherStartX=camX-40;
@@ -433,9 +638,11 @@ function updatePlay(dt){
 
   if(player.boost>0){
     player.boost=Math.max(0,player.boost-dt);
+    if(player.boost<=0) player.boostCarry=BOOST_RECOVER_TIME;
     if(Math.random()<0.7) burst(player.x-20,player.y+7,1,'#ffe68f',90);
     if(Math.random()<0.3) burst(player.x-18,player.y+5,1,'#ffb347',70);
   }
+  if(player.boostCarry>0) player.boostCarry=Math.max(0,player.boostCarry-dt);
 
   player.swerve=Math.max(0,player.swerve-dt);
   player.potholeDip=Math.max(0,player.potholeDip-dt*3);
@@ -448,8 +655,16 @@ function updatePlay(dt){
     if(input.brake) acc-=144*DECEL_SCALE;
     if(player.boost>0) acc+=385*ACCEL_SCALE;
     if(player.potholeSlow>0) acc-=240*DECEL_SCALE;
+    const hardCap=MAX_SPEED*BOOST_MAX_MULT;
     player.speed+=acc*dt;
-    player.speed=Math.max(0,Math.min(MAX_SPEED,player.speed));
+    player.speed=Math.max(0,Math.min(hardCap,player.speed));
+    if(player.boost<=0){
+      if(player.boostCarry>0&&player.speed>MAX_SPEED){
+        player.speed=Math.max(MAX_SPEED,player.speed-BOOST_RECOVER_DECEL*dt);
+      }else if(player.speed>MAX_SPEED){
+        player.speed=MAX_SPEED;
+      }
+    }
     player.x+=player.speed*dt;
     const gy=groundY(player.x);
     if(gy==null){
@@ -458,36 +673,44 @@ function updatePlay(dt){
       player.vy=sl*player.speed*0.48;
       player.airY=player.y;
     }else{
-      player.y=gy-16;
+      player.y=gy-BUGGY.rideHeight;
       player.ang=Math.atan(sl)-(input.brake?0.13:0);
       if(player.speed>44&&Math.random()<0.35) burst(player.x-18,gy-4,1,'#c9ae84',40);
     }
   }else{
+    const prevX=player.x,prevY=player.y;
     if(input.brake){
       player.vx=Math.max(14,player.vx-112*DECEL_SCALE*dt);
       player.ang-=1.8*dt;
     }else player.ang+=0.75*dt;
     if(player.boost>0) player.vx+=96*ACCEL_SCALE*dt;
-    player.vy+=720*dt;
+    player.vy+=BUGGY.airGravity*dt;
     player.x+=player.vx*dt;
     player.y+=player.vy*dt;
+
+    const wallHit=findGapWallHit(prevX,prevY,player.x,player.y);
+    if(wallHit){endRun('Hit the cliff wall',1);return;}
 
     const q=gapAt(player.x);
     if(q&&player.y>q.btm){
       if(q.river) burst(player.x,player.y,22,'#5ab8e0',220);
       endRun(q.river?'Fell in the river':'Missed the bridge',0);return;
     }
-    const gy=groundY(player.x);
-    if(gy!=null&&player.y>=gy-16){
-      const sa=Math.atan(slopeAt(player.x));
-      const aErr=Math.abs(normAng(player.ang-sa));
-      const hard=player.vy>304||player.y-player.airY>220;
-      if(aErr>0.95||hard){endRun('Bad landing',1);return;}
+
+    const touch=findGroundTouch(prevX,prevY,player.x,player.y);
+    if(touch){
+      const sa=Math.atan(touch.slope);
+      const bodyErr=Math.abs(normAng(player.ang-sa));
+      const velAng=Math.atan2(player.vy,Math.max(1,player.vx));
+      const impactErr=Math.abs(normAng(velAng-sa));
+      const hard=player.vy>BUGGY.maxLandVY||touch.y-player.airY>BUGGY.maxLandDrop;
+      if(bodyErr>BUGGY.maxBodyErr||impactErr>BUGGY.maxImpactErr||hard){endRun('Bad landing',1);return;}
       player.on=1;
-      player.y=gy-16;
+      player.x=touch.x;
+      player.y=touch.y;
       player.speed=Math.max(16,player.vx*0.92);
       player.vx=0;player.vy=0;player.ang=sa;
-      burst(player.x,gy-3,8,'#d3b082',110);
+      burst(player.x,touch.gy-3,8,'#d3b082',110);
     }
     if(player.y>camY+H+260){endRun('Could not recover',0);return;}
   }
@@ -497,15 +720,12 @@ function updatePlay(dt){
     if(p.flash>0) p.flash-=dt;
     if(!p.done&&player.x>p.x+8){
       p.done=1;
-      const gy=groundY(p.x);
-      if(p.dodge){
-        if(gy!=null) textDisplays.push({x:p.x,y:gy-40,text:'swerved',time:1.0});
-      }else{
+      if(!p.dodge){
         player.potholeSlow=0.3;
         player.potholeDip=0.35;
         burst(p.x,groundY(p.x)-6,12,'#6e5a3f',140);
         sfx('hit');
-        if(gy!=null) textDisplays.push({x:p.x,y:gy-40,text:'oof',time:1.0});
+        queueCenterCue('OOF',{dur:0.92,size:26,col:'#ffd7bf'});
       }
     }
   }
@@ -529,12 +749,6 @@ function updatePlay(dt){
     p.life-=dt;
     if(p.life<=0){particles.splice(i,1);continue;}
     p.vy+=380*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;
-  }
-
-  for(let i=textDisplays.length-1;i>=0;i--){
-    const t=textDisplays[i];
-    t.time-=dt;
-    if(t.time<=0){textDisplays.splice(i,1);continue;}
   }
 
   trimWorld();
@@ -827,19 +1041,21 @@ function drawButton(b,key){
     actPulse=Math.max(0,actPulse-1/60);
   }
 
-  g.globalAlpha=1;
-  g.fillStyle=disabled?'#999':'#fff';
+  // Keep labels/icons on buttons for readability while center cues animate separately.
+  g.globalAlpha=disabled?0.45:0.8;
+  g.fillStyle=disabled?'#c8c8c8':'#fff';
   g.textAlign='center';
   if(b.icon){
-    // Large icon above, smaller label below
-    g.font='700 '+Math.max(18,b.r*0.42)+'px system-ui,sans-serif';
+    g.font='italic 800 '+Math.max(18,b.r*0.42)+'px system-ui,sans-serif';
     g.fillText(b.icon,b.x,b.y-2);
-    g.font='700 '+Math.max(9,b.r*0.17)+'px system-ui,sans-serif';
-    g.fillText(b.label,b.x,b.y+Math.max(14,b.r*0.32));
+    g.font='italic 800 '+Math.max(9,b.r*0.17)+'px system-ui,sans-serif';
+    g.fillText(String(b.label||'').toUpperCase(),b.x,b.y+Math.max(14,b.r*0.32));
   }else{
-    g.font='700 '+Math.max(11,b.r*0.22)+'px system-ui,sans-serif';
-    g.fillText(b.label,b.x,b.y+4);
+    g.font='italic 800 '+Math.max(11,b.r*0.22)+'px system-ui,sans-serif';
+    g.fillText(String(b.label||'').toUpperCase(),b.x,b.y+4);
   }
+  g.textAlign='left';
+  g.globalAlpha=1;
 }
 
 function drawOneTree(tx,baseY,kind,sc,dark){
@@ -977,24 +1193,6 @@ function render(){
 
   drawTrees(1); // foreground trees (in front of track, sparser)
 
-  for(let i=0;i<textDisplays.length;i++){
-    const t=textDisplays[i];
-    const sx=t.x-camX;
-    const sy=t.y-camY;
-    if(sx<-100||sx>W+100||sy<-100||sy>H+100) continue;
-    const alpha=Math.min(1,t.time);
-    g.globalAlpha=alpha;
-    g.fillStyle=t.col||'#fff';
-    g.font='800 '+(32+Math.sin(tNow*8)*2)+'px system-ui,sans-serif';
-    g.textAlign='center';
-    g.strokeStyle=t.stroke||'rgba(0,0,0,0.6)';
-    g.lineWidth=6;
-    g.strokeText(t.text,sx,sy);
-    g.fillText(t.text,sx,sy);
-    g.textAlign='left';
-  }
-  g.globalAlpha=1;
-
   if(mode==='play') drawHud();
 
   // Update Action button label and disabled state based on nearby pots (potholes) or npcs (pushers)
@@ -1034,25 +1232,7 @@ function render(){
   drawButton(btn.call,'call');
   drawButton(btn.brake,'brake');
   drawButton(btn.act,'act');
-
-  // Render floating text rising from the action button
-  for(let i=btnFloats.length-1;i>=0;i--){
-    const f=btnFloats[i];
-    f.time-=1/60;
-    if(f.time<=0){btnFloats.splice(i,1);continue;}
-    const t=1-f.time/f.max; // 0→1 over lifetime
-    const yOff=btn.act.r+20+t*55; // rise upward from button
-    const alpha=Math.max(0,1-t*1.3);
-    g.globalAlpha=alpha;
-    g.textAlign='center';
-    g.font='800 '+Math.max(13,btn.act.r*0.24)+'px system-ui,sans-serif';
-    g.strokeStyle='rgba(0,0,0,0.5)';g.lineWidth=4;
-    g.strokeText(f.text,btn.act.x,btn.act.y-yOff);
-    g.fillStyle=f.col;
-    g.fillText(f.text,btn.act.x,btn.act.y-yOff);
-  }
-  g.globalAlpha=1;
-  g.textAlign='left';
+  drawCenterCues();
 
   if(mode==='title'){
     g.textAlign='center';
@@ -1149,6 +1329,7 @@ function render(){
 
 function update(dt){
   tNow+=dt;
+  updateCenterCues(dt);
   if(mode==='play'&&W>=H) updatePlay(dt);
   else{
     if(mode==='title'){
@@ -1157,7 +1338,7 @@ function update(dt){
     ensureWorld(player.x+W+1200);
     const gy=groundY(player.x)||320;
     camX+=(player.x-W*0.33-camX)*Math.min(1,dt*3.2);
-    camY+=(gy-16-H*CAM_FOLLOW_Y-camY)*Math.min(1,dt*3);
+    camY+=(gy-BUGGY.rideHeight-H*CAM_FOLLOW_Y-camY)*Math.min(1,dt*3);
     for(let i=particles.length-1;i>=0;i--){
       const p=particles[i];
       p.life-=dt;
@@ -1169,7 +1350,10 @@ function update(dt){
 
 function keyDown(e){
   if(e.repeat&&(e.key==='a'||e.key==='A'||e.key===' '||e.key==='ArrowUp')) return;
-  if(e.key==='s'||e.key==='S'||e.key==='ArrowDown') input.brake=1;
+  if(e.key==='s'||e.key==='S'||e.key==='ArrowDown'){
+    if(mode==='play'&&!input.brake) queueCenterCue(btn.brake.label,{dur:0.8,size:24,col:'#ffd3c8'});
+    input.brake=1;
+  }
   if(mode==='play'&&(e.key==='a'||e.key==='A')){input.call=1;btn.call.active=0.18;audioInit()}
   if(mode==='play'&&(e.key===' '||e.key==='ArrowUp')){input.act=1;btn.act.active=0.18;audioInit()}
   if((e.key==='Enter'||e.key==='r'||e.key==='R')&&mode!=='play'){audioInit();resetRun();}
@@ -1210,7 +1394,10 @@ function pointerDown(e){
     e.preventDefault();
     return;
   }
-  if(k==='brake'){brakePointers.add(e.pointerId);input.brake=1;}
+  if(k==='brake'){
+    if(!input.brake) queueCenterCue(btn.brake.label,{dur:0.8,size:24,col:'#ffd3c8'});
+    brakePointers.add(e.pointerId);input.brake=1;
+  }
   else if(k==='call'){input.call=1;btn.call.active=0.18;}
   else if(k==='act'){input.act=1;btn.act.active=0.18;}
   e.preventDefault();
@@ -1236,7 +1423,7 @@ c.addEventListener('pointercancel',pointerUp);
 c.addEventListener('pointerleave',pointerUp);
 resize();
 ensureWorld(2200);
-player.y=(groundY(player.x)||320)-16;
+player.y=(groundY(player.x)||320)-BUGGY.rideHeight;
 camX=player.x-W*0.33;camY=player.y-H*CAM_FOLLOW_Y;
 requestAnimationFrame(loop);
 })();
