@@ -17,8 +17,6 @@ const BETWEEN_BRIDGES_PUSHER_LEAD=520;
 const BRIDGE_PUSHER_EDGE_PAD=140;
 const PUSHER_SPAWN_RATE=0.5;
 const BRIDGE_WIDTH_SCALE=0.85;
-const BRAKE_DECEL_GROUND=980;
-const BRAKE_DECEL_AIR=720;
 const PUSHER_RUN=0.5;
 const PUSHER_FOLLOW_OFFSET=40;
 const PUSHER_STOP_ALPHA=0.75;
@@ -47,8 +45,7 @@ const GEN={
   },
   terrain:{lenMin:150,lenMax:275,min:-0.08,max:0.78,flatCut:0.14,flatLimit:2,maxRisePerSeg:22,maxRiseFromDeep:96}
 };
-const btn={call:{x:0,y:0,r:0,active:0,label:'CALL PUSHER'},brake:{x:0,y:0,r:0,active:0,label:'BRAKE'},act:{x:0,y:0,r:0,active:0,label:'ACTION',disabled:true}};
-const brakePointers=new Set();
+const btn={call:{x:0,y:0,r:0,active:0,label:'CALL PUSHER'},act:{x:0,y:0,r:0,active:0,label:'ACTION',disabled:true}};
 let actPulse=0; // expanding ring timer when action becomes available
 const centerCues=[];
 let ac=null,master=null;
@@ -56,7 +53,7 @@ let mode='title',reason='';
 let tNow=0,score=0,best=0,startX=0,newBest=0;
 let camX=0,camY=0,rollT=0;
 let tutorialStep=0,tutorialTimer=0;
-const input={brake:0,call:0,act:0};
+const input={call:0,act:0};
 
 const world={
   pts:[{x:-240,y:300},{x:0,y:320}],
@@ -115,7 +112,6 @@ function layoutButtons(){
   const buttonLift=Math.max(10,r*0.18);
   btn.act.x=leftPad+r;btn.act.y=H-bottomPad-r-buttonLift;btn.act.r=r;
   btn.call.x=W-rightPad-r;btn.call.y=H-bottomPad-r-buttonLift;btn.call.r=r;
-  btn.brake.x=W-rightPad-r;btn.brake.y=H-bottomPad-r-r*2.2-buttonLift;btn.brake.r=r*0.85;
 }
 
 function audioInit(){
@@ -618,8 +614,7 @@ function resetRun(){
 function startRunFromTitle(){
   mode='play';reason='';score=0;newBest=0;rollT=0;
   centerCues.length=0;actPulse=0;
-  input.brake=0;input.call=0;input.act=0;
-  brakePointers.clear();
+  input.call=0;input.act=0;
   btn.call.active=0;btn.act.active=0;
   const gy=groundY(player.x)||320;
   player.y=gy-BUGGY.rideHeight;
@@ -806,7 +801,6 @@ function updatePlay(dt){
     const sl=slopeAt(player.x);
     const slopeAcc=sl*SLOPE_GRAVITY;
     let acc=(slopeAcc>=0?slopeAcc*ACCEL_SCALE:slopeAcc*DECEL_SCALE)-22*DECEL_SCALE;
-    if(input.brake) acc-=BRAKE_DECEL_GROUND*DECEL_SCALE;
     if(player.boost>0) acc+=385*ACCEL_SCALE;
     if(player.potholeSlow>0) acc-=240*DECEL_SCALE;
     const hardCap=MAX_SPEED*BOOST_MAX_MULT;
@@ -828,15 +822,12 @@ function updatePlay(dt){
       player.airY=player.y;
     }else{
       player.y=gy-BUGGY.rideHeight;
-      player.ang=Math.atan(sl)-(input.brake?0.13:0);
+      player.ang=Math.atan(sl);
       if(player.speed>44&&Math.random()<0.35) burst(player.x-18,gy-4,1,'#c9ae84',40);
     }
   }else{
     const prevX=player.x,prevY=player.y;
-    if(input.brake){
-      player.vx=Math.max(8,player.vx-BRAKE_DECEL_AIR*DECEL_SCALE*dt);
-      player.ang-=1.8*dt;
-    }else player.ang+=0.75*dt;
+    player.ang+=0.75*dt;
     if(player.boost>0) player.vx+=96*ACCEL_SCALE*dt;
     player.vy+=BUGGY.airGravity*dt;
     player.x+=player.vx*dt;
@@ -1360,7 +1351,6 @@ function tutorialFocusTarget(){
   if(tutorialStep===2) return {x:btn.call.x,y:btn.call.y,r:btn.call.r+9,key:'call'};
   if(tutorialStep===3) return {x:btn.act.x,y:btn.act.y,r:btn.act.r+9,key:'act'};
   if(tutorialStep===4) return {x:btn.act.x,y:btn.act.y,r:btn.act.r+9,key:'act'};
-  if(tutorialStep===5) return {x:btn.brake.x,y:btn.brake.y,r:btn.brake.r+9,key:'brake'};
   return null;
 }
 
@@ -1376,13 +1366,13 @@ function getSkipRect(){
 }
 
 function hitSkip(px,py){
-  if(tutorialStep<1) return 0;
+  if(tutorialStep<1||tutorialStep>=5) return 0;
   const s=getSkipRect();
   return px>=s.x&&px<=s.x+s.w&&py>=s.y&&py<=s.y+s.h;
 }
 
 function drawButton(b,key){
-  const active=(key==='brake'?input.brake:b.active>0);
+  const active=b.active>0;
   // allow per-button disabled flag (b.disabled) but keep existing call-specific rule
   const callDisabled = (key==='call' && player.have===0);
   const bDisabled = !!b.disabled;
@@ -1402,7 +1392,7 @@ function drawButton(b,key){
     g.beginPath();g.arc(b.x,b.y,glowR,0,TAU);g.fill();
   }
   g.globalAlpha=baseAlpha;
-  g.fillStyle=disabled?'#666':key==='brake'?'#f06a4f':key==='call'?'#2e91d8':'#6fbf4f';
+  g.fillStyle=disabled?'#666':key==='call'?'#2e91d8':'#6fbf4f';
   g.beginPath();g.arc(b.x,b.y,b.r,0,TAU);g.fill();
   g.strokeStyle=disabled?'rgba(255,255,255,.4)':'rgba(255,255,255,.85)';g.lineWidth=3;g.stroke();
 
@@ -1686,7 +1676,6 @@ function render(){
   }
 
   drawButton(btn.call,'call');
-  drawButton(btn.brake,'brake');
   drawButton(btn.act,'act');
   drawPusherReserve();
   drawCenterCues();
@@ -1711,8 +1700,6 @@ function render(){
     }else if(tutorialStep===4){
       tutBox('Press ACTION near these to collect pushers and swerve potholes.',tutorialFocusTarget());
       drawActionTutorialPanel();
-    }else if(tutorialStep===5){
-      tutBox('You know what this one does',tutorialFocusTarget());
     }else{
       const lines=['All 446 Pittsburgh bridges are down,','so you\'ll have to jump the gaps!','Run out of speed or crash = run over.'];
       const bw=Math.min(W*0.9,560),bh=188;
@@ -1753,7 +1740,7 @@ function render(){
       g.font='800 22px system-ui,sans-serif';
       g.fillText('TAP TO START',W*0.5,sby+sbh*0.65);
     }
-    if(tutorialStep>=1){
+    if(tutorialStep>=1&&tutorialStep<5){
       const s=getSkipRect();
       const skipPulse=(Math.sin(tNow*4.4)+1)*0.5;
       g.fillStyle='rgba(10,13,18,.58)';
@@ -1838,10 +1825,6 @@ function update(dt){
 
 function keyDown(e){
   if(e.repeat&&(e.key==='a'||e.key==='A'||e.key===' '||e.key==='ArrowUp')) return;
-  if(e.key==='s'||e.key==='S'||e.key==='ArrowDown'){
-    if(mode==='play'&&!input.brake) queueCenterCue(btn.brake.label,{dur:0.8,size:24,col:'#ffd3c8'});
-    input.brake=1;
-  }
   if(mode==='play'&&(e.key==='a'||e.key==='A')){input.call=1;btn.call.active=0.18;audioInit()}
   if(mode==='play'&&(e.key===' '||e.key==='ArrowUp')){input.act=1;btn.act.active=0.18;audioInit()}
   if((e.key==='Enter'||e.key==='r'||e.key==='R')&&mode!=='play'){
@@ -1854,15 +1837,11 @@ function keyDown(e){
     if(mode==='title') startRunFromTitle();
     else resetRun();
   }
-  if(['ArrowDown','ArrowUp',' '].includes(e.key)) e.preventDefault();
-}
-
-function keyUp(e){
-  if(e.key==='s'||e.key==='S'||e.key==='ArrowDown') input.brake=0;
+  if(['ArrowUp',' '].includes(e.key)) e.preventDefault();
 }
 
 function hitButton(x,y){
-  for(const k of ['call','brake','act']){
+  for(const k of ['call','act']){
     const b=btn[k],dx=x-b.x,dy=y-b.y;
     if(dx*dx+dy*dy<=b.r*b.r) return k;
   }
@@ -1876,7 +1855,7 @@ function pointerDown(e){
   if(mode==='title'){
     if(hitSkip(px,py)){
       startRunFromTitle();
-    }else if(tutorialStep<6){
+    }else if(tutorialStep<5){
       tutorialStep++;
       tutorialTimer=0;
     }else{
@@ -1890,17 +1869,9 @@ function pointerDown(e){
     e.preventDefault();
     return;
   }
-  if(k==='brake'){
-    if(!input.brake) queueCenterCue(btn.brake.label,{dur:0.8,size:24,col:'#ffd3c8'});
-    brakePointers.add(e.pointerId);input.brake=1;
-  }
-  else if(k==='call'){input.call=1;btn.call.active=0.18;}
+  if(k==='call'){input.call=1;btn.call.active=0.18;}
   else if(k==='act'){input.act=1;btn.act.active=0.18;}
   e.preventDefault();
-}
-
-function pointerUp(e){
-  if(brakePointers.delete(e.pointerId)) input.brake=brakePointers.size>0?1:0;
 }
 
 function loop(ms){
@@ -1912,11 +1883,7 @@ function loop(ms){
 addEventListener('resize',resize);
 if(window.visualViewport) visualViewport.addEventListener('resize',resize);
 addEventListener('keydown',keyDown,{passive:false});
-addEventListener('keyup',keyUp);
 c.addEventListener('pointerdown',pointerDown,{passive:false});
-c.addEventListener('pointerup',pointerUp);
-c.addEventListener('pointercancel',pointerUp);
-c.addEventListener('pointerleave',pointerUp);
 resize();
 resetRun();
 mode='title';

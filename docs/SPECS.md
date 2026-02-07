@@ -18,10 +18,9 @@ A 2D side-view downhill infinite runner inspired by Alto's Adventure, themed aro
 - **Tone**: Fun, arcade-y, colorful
 
 ## Controls (Touch / Mobile)
-Three buttons on screen:
-1. **Call Pusher** (bottom-left): Summons your collected pusher to push you, giving a speed boost for several seconds. Pusher disappears after pushing.
-2. **Slow Down / Brake** (bottom-right): Reduces speed. Useful for controlling trajectory while airborne, adjusting landing angle.
-3. **Action** (above Slow Down button, right side): Context-sensitive:
+Two buttons on screen:
+1. **Call Pusher** (bottom-right): Summons your collected pusher to push you, giving a speed boost for several seconds. Pusher disappears after pushing.
+2. **Action** (bottom-left): Context-sensitive:
    - Near a bystander NPC on the track: **Collect** them as your available pusher
    - Near a pothole: **Swerve** to dodge it (avoids speed penalty)
 
@@ -40,13 +39,11 @@ Three buttons on screen:
 - **Speed** determined by:
   - Slope angle (steeper = faster, flat/uphill = slower)
   - Pusher boosts (temporary speed injection)
-  - Brake input (slows down)
   - Pothole hits (speed penalty if not dodged)
 - **Airborne**: buggy follows projectile trajectory when off terrain
 - **Landing**: must land at a "natural" angle relative to the terrain surface
   - Landing angle too steep (nose-diving) → **crash / game over**
   - Landing too hard from extreme height → **crash / game over**
-  - Brake while airborne lets you adjust angle/trajectory
 
 ## Entities
 
@@ -101,12 +98,12 @@ Three buttons on screen:
 ### 2. Physics System
 - Buggy movement along terrain surface
 - Gravity when airborne
-- Speed calculation (slope, friction, boosts, brakes)
+- Speed calculation (slope, friction, boosts)
 - Landing detection and crash evaluation
 
 ### 3. Input / Controls System
 - Touch button rendering and hit detection
-- Three-button layout
+- Two-button layout
 - Action context detection (near pusher? near pothole?)
 
 ### 4. Entity System
