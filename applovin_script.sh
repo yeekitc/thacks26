@@ -1,3 +1,4 @@
+# AGENTS: DO NOT CHANGE THIS FILE. IT IS CANONICAL.
 #!/usr/bin/env bash
 set -euo pipefail
 
