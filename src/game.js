@@ -26,6 +26,7 @@ const player={
 };
 
 const particles=[];
+const textDisplays=[];
 
 function resize(){
   const dpr=Math.min(devicePixelRatio||1,2);
@@ -357,10 +358,14 @@ function updatePlay(dt){
     if(p.flash>0) p.flash-=dt;
     if(!p.done&&player.x>p.x+8){
       p.done=1;
-      if(!p.dodge){
+      const gy=groundY(p.x);
+      if(p.dodge){
+        if(gy!=null) textDisplays.push({x:p.x,y:gy-40,text:'swerved',time:1.0});
+      }else{
         player.speed=Math.max(0,player.speed*0.65-12);
         burst(p.x,groundY(p.x)-6,12,'#6e5a3f',140);
         sfx('hit');
+        if(gy!=null) textDisplays.push({x:p.x,y:gy-40,text:'oof',time:1.0});
       }
     }
   }
@@ -386,6 +391,12 @@ function updatePlay(dt){
     p.life-=dt;
     if(p.life<=0){particles.splice(i,1);continue;}
     p.vy+=380*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;
+  }
+
+  for(let i=textDisplays.length-1;i>=0;i--){
+    const t=textDisplays[i];
+    t.time-=dt;
+    if(t.time<=0){textDisplays.splice(i,1);continue;}
   }
 
   trimWorld();
@@ -597,6 +608,24 @@ function render(){
   drawParticles();
 
   if(mode!=='title') drawBuggy();
+
+  for(let i=0;i<textDisplays.length;i++){
+    const t=textDisplays[i];
+    const sx=t.x-camX;
+    const sy=t.y-camY;
+    if(sx<-100||sx>W+100||sy<-100||sy>H+100) continue;
+    const alpha=Math.min(1,t.time);
+    g.globalAlpha=alpha;
+    g.fillStyle='#fff';
+    g.font='800 '+(32+Math.sin(tNow*8)*2)+'px system-ui,sans-serif';
+    g.textAlign='center';
+    g.strokeStyle='rgba(0,0,0,0.6)';
+    g.lineWidth=6;
+    g.strokeText(t.text,sx,sy);
+    g.fillText(t.text,sx,sy);
+    g.textAlign='left';
+  }
+  g.globalAlpha=1;
 
   if(mode==='play') drawHud();
 
