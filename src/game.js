@@ -1,6 +1,7 @@
 (()=>{
 const c=document.getElementById('c'),g=c.getContext('2d',{alpha:false});
 let W=0,H=0;
+const ZOOM=0.9;
 const TAU=Math.PI*2;
 const btn={call:{x:0,y:0,r:0,active:0,label:'CALL PUSHER'},brake:{x:0,y:0,r:0,active:0,label:'BRAKE'},act:{x:0,y:0,r:0,active:0,label:'ACTION',disabled:true}};
 const brakePointers=new Set();
@@ -19,11 +20,11 @@ const world={
   pots:[],
   npcs:[],
   lastX:0,lastY:320,
-  nextPot:360,nextNpc:280,nextGap:760
+  nextPot:600,nextNpc:280,nextGap:760
 };
 
 const player={
-  x:80,y:0,vx:0,vy:0,speed:85,
+  x:80,y:0,vx:0,vy:0,speed:68,
   on:1,ang:0,airY:0,stall:0,
   have:0,boost:0,swerve:0,maxHave:5,potholeDip:0,
   pusherIncoming:0,pusherStartX:0
@@ -31,21 +32,31 @@ const player={
 
 const particles=[];
 const textDisplays=[];
+const safeProbe=document.createElement('div');
+safeProbe.style.cssText='position:fixed;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);pointer-events:none;visibility:hidden;width:0;height:0';
+document.body.appendChild(safeProbe);
+let safeL=0,safeR=0,safeT=0,safeB=0;
 
 function resize(){
   const dpr=Math.min(devicePixelRatio||1,2);
-  W=innerWidth;H=innerHeight;
-  c.width=Math.floor(W*dpr);c.height=Math.floor(H*dpr);
-  g.setTransform(dpr,0,0,dpr,0,0);
+  const sw=innerWidth,sh=innerHeight;
+  W=sw/ZOOM;H=sh/ZOOM;
+  c.width=Math.floor(sw*dpr);c.height=Math.floor(sh*dpr);
+  g.setTransform(dpr*ZOOM,0,0,dpr*ZOOM,0,0);
+  const cs=getComputedStyle(safeProbe);
+  safeT=(parseFloat(cs.paddingTop)||0)/ZOOM;
+  safeR=(parseFloat(cs.paddingRight)||0)/ZOOM;
+  safeB=(parseFloat(cs.paddingBottom)||0)/ZOOM;
+  safeL=(parseFloat(cs.paddingLeft)||0)/ZOOM;
   layoutButtons();
 }
 
 function layoutButtons(){
   const pad=Math.max(18,Math.min(W,H)*0.03);
   const r=Math.max(42,Math.min(W,H)*0.115);
-  const leftPad=pad*1.8;
-  const rightPad=pad*1.8;
-  const bottomPad=pad*2.2;
+  const leftPad=Math.max(pad*1.8,safeL+pad*0.5);
+  const rightPad=Math.max(pad*1.8,safeR+pad*0.5);
+  const bottomPad=Math.max(pad*2.2,safeB+pad*0.5);
   btn.act.x=leftPad+r;btn.act.y=H-bottomPad-r;btn.act.r=r;
   btn.call.x=W-rightPad-r;btn.call.y=H-bottomPad-r;btn.call.r=r;
   btn.brake.x=W-rightPad-r;btn.brake.y=H-bottomPad-r-r*2.2;btn.brake.r=r*0.85;
@@ -156,13 +167,13 @@ function spawnEntities(fromX,toX){
     const tooClose=world.npcs.some(n=>Math.abs(n.x-x)<160);
     if(x>=fromX&&!gapAt(x)&&Math.abs(slopeAt(x))<0.72&&!tooClose) {
       world.pots.push({x,r:20,done:0,dodge:0,flash:0});
-      world.nextPot+=180+Math.random()*220;
+      world.nextPot+=360+Math.random()*400;
       attempts=0;
     } else {
       world.nextPot+=30;
       attempts++;
       if(attempts>20) {
-        world.nextPot+=180+Math.random()*220;
+        world.nextPot+=360+Math.random()*400;
         attempts=0;
       }
     }
@@ -221,7 +232,7 @@ function ensureWorld(toX){
     }else{
       const len=80+Math.random()*140;
       const r=Math.random();
-      let s=r<0.15?0.02+Math.random()*0.05:r<0.55?0.15+Math.random()*0.35:r<0.85?0.35+Math.random()*0.48:-0.18+Math.random()*0.12;
+      let s=r<0.12?0.04+Math.random()*0.06:r<0.50?0.18+Math.random()*0.38:r<0.92?0.38+Math.random()*0.50:-0.12+Math.random()*0.10;
       const inStartZone=x0<700;
       if(inStartZone&&s<0.05) s=0.15+Math.random()*0.25;
       if(world.lastY<150&&s<0.05) s=0.25+Math.random()*0.3;
@@ -247,8 +258,8 @@ function resetRun(){
   world.pts=[{x:-240,y:300},{x:0,y:320}];
   world.gaps=[];world.pots=[];world.npcs=[];
   world.lastX=0;world.lastY=320;
-  world.nextPot=320;world.nextNpc=240;world.nextGap=760;
-  player.x=80;player.speed=85;player.vx=0;player.vy=0;player.on=1;player.ang=0;
+  world.nextPot=600;world.nextNpc=240;world.nextGap=760;
+  player.x=80;player.speed=68;player.vx=0;player.vy=0;player.on=1;player.ang=0;
   player.have=0;player.boost=0;player.swerve=0;player.airY=0;player.stall=0;player.potholeDip=0;player.pusherIncoming=0;player.pusherStartX=0;
   btnFloats.length=0;actPulse=0;
   ensureWorld(player.x+2200);
@@ -328,7 +339,8 @@ function updatePlay(dt){
   if(player.pusherIncoming>0){
     player.pusherIncoming=Math.max(0,player.pusherIncoming-dt);
     if(player.pusherIncoming<=0){
-      player.boost=3.2;
+      player.boost=1.8;
+      player.speed=Math.min(416,player.speed+80);
       burst(player.x-15,player.y+8,14,'#ffde94',150);
     }
   }
@@ -344,29 +356,29 @@ function updatePlay(dt){
 
   if(player.on){
     const sl=slopeAt(player.x);
-    let acc=sl*380-28;
-    if(input.brake) acc-=180;
-    if(player.boost>0) acc+=240;
+    let acc=sl*304-22;
+    if(input.brake) acc-=144;
+    if(player.boost>0) acc+=340;
     player.speed+=acc*dt;
-    player.speed=Math.max(0,Math.min(520,player.speed));
+    player.speed=Math.max(0,Math.min(416,player.speed));
     player.x+=player.speed*dt;
     const gy=groundY(player.x);
     if(gy==null){
       player.on=0;
-      player.vx=Math.max(15,player.speed);
+      player.vx=Math.max(12,player.speed);
       player.vy=sl*player.speed*0.48;
       player.airY=player.y;
     }else{
       player.y=gy-16;
       player.ang=Math.atan(sl)-(input.brake?0.13:0);
-      if(player.speed>55&&Math.random()<0.35) burst(player.x-18,gy-4,1,'#c9ae84',40);
+      if(player.speed>44&&Math.random()<0.35) burst(player.x-18,gy-4,1,'#c9ae84',40);
     }
   }else{
     if(input.brake){
-      player.vx=Math.max(18,player.vx-140*dt);
+      player.vx=Math.max(14,player.vx-112*dt);
       player.ang-=1.8*dt;
     }else player.ang+=0.75*dt;
-    if(player.boost>0) player.vx+=60*dt;
+    if(player.boost>0) player.vx+=85*dt;
     player.vy+=720*dt;
     player.x+=player.vx*dt;
     player.y+=player.vy*dt;
@@ -380,11 +392,11 @@ function updatePlay(dt){
     if(gy!=null&&player.y>=gy-16){
       const sa=Math.atan(slopeAt(player.x));
       const aErr=Math.abs(normAng(player.ang-sa));
-      const hard=player.vy>380||player.y-player.airY>220;
+      const hard=player.vy>304||player.y-player.airY>220;
       if(aErr>0.95||hard){endRun('Bad landing',1);return;}
       player.on=1;
       player.y=gy-16;
-      player.speed=Math.max(20,player.vx*0.92);
+      player.speed=Math.max(16,player.vx*0.92);
       player.vx=0;player.vy=0;player.ang=sa;
       burst(player.x,gy-3,8,'#d3b082',110);
     }
@@ -419,8 +431,8 @@ function updatePlay(dt){
   hintT=Math.max(0,hintT-dt);
 
   rollT-=dt;
-  if(rollT<=0&&player.on&&player.speed>30){
-    const s=Math.min(1,player.speed/380);
+  if(rollT<=0&&player.on&&player.speed>24){
+    const s=Math.min(1,player.speed/304);
     tone(70+s*65,0.03,'triangle',0.005+s*0.004,0.9);
     rollT=0.06+(1-s)*0.12;
   }
@@ -682,18 +694,19 @@ function drawParticles(){
 }
 
 function drawHud(){
+  const hx=safeL,hy=safeT;
   g.fillStyle='rgba(0,0,0,.3)';
-  g.fillRect(12,12,240,56);
+  g.fillRect(12+hx,12+hy,240,56);
   g.fillStyle='#fff';
   g.font='700 18px system-ui,sans-serif';
-  g.fillText('DIST '+score+' m',20,34);
+  g.fillText('DIST '+score+' m',20+hx,34+hy);
   g.font='600 13px system-ui,sans-serif';
-  g.fillText('BEST '+best+' m',20,53);
+  g.fillText('BEST '+best+' m',20+hx,53+hy);
 
-  const v=Math.min(1,player.speed/420);
-  g.fillStyle='rgba(0,0,0,.35)';g.fillRect(265,18,170,16);
-  g.fillStyle=v>.67?'#67e18f':v>.34?'#ffd36a':'#ff8c5a';g.fillRect(267,20,166*v,12);
-  g.strokeStyle='rgba(255,255,255,.4)';g.strokeRect(265,18,170,16);
+  const v=Math.min(1,player.speed/336);
+  g.fillStyle='rgba(0,0,0,.35)';g.fillRect(265+hx,18+hy,170,16);
+  g.fillStyle=v>.67?'#67e18f':v>.34?'#ffd36a':'#ff8c5a';g.fillRect(267+hx,20+hy,166*v,12);
+  g.strokeStyle='rgba(255,255,255,.4)';g.strokeRect(265+hx,18+hy,170,16);
 
   if(hintT>0){
     const a=Math.min(1,hintT)*Math.min(1,tNow*0.7);
@@ -1096,7 +1109,7 @@ function hitButton(x,y){
 
 function pointerDown(e){
   audioInit();
-  const k=hitButton(e.clientX,e.clientY);
+  const k=hitButton(e.clientX/ZOOM,e.clientY/ZOOM);
   if(mode==='title'){
     if(tutorialStep<5){
       tutorialStep++;
