@@ -8,6 +8,7 @@ let ac=null,master=null;
 let mode='title',reason='';
 let tNow=0,score=0,best=0,startX=0;
 let camX=0,camY=0,hintT=11,rollT=0;
+let tutorialStep=0,tutorialTimer=0;
 const input={brake:0,call:0,act:0};
 
 const world={
@@ -290,7 +291,7 @@ function tryAction(){
   }
   if(nearNpc&&(!nearPot||dN<=dP)){
     if(player.have<player.maxHave){
-      nearNpc.got=1;player.have++;sfx('collect');burst(nearNpc.x,groundY(nearNpc.x)-34,10,'#9be6ff',90);
+      nearNpc.got=1;player.have++;sfx('collect');
     }
     return;
   }
@@ -475,27 +476,6 @@ function drawWorld(){
     g.beginPath();g.ellipse(sx,sy,p.r,p.r*0.56,0,0,TAU);g.fill();
   }
 
-  // Draw collected pushers following buggy
-  let followCount=0;
-  for(let i=0;i<world.npcs.length;i++){
-    const n=world.npcs[i];
-    if(!n.got) continue;
-    const followDist=35+(followCount++)*18;
-    const fx=player.x-followDist;
-    const sx=fx-camX;
-    if(sx<-40||sx>W+40) continue;
-    const gy=groundY(fx);if(gy==null) continue;
-    const sy=gy-camY;
-    const wave=Math.sin(tNow*5+n.wave)*1.5;
-    g.strokeStyle='#b8e6ff';g.lineWidth=2.5;g.lineCap='round';
-    g.beginPath();
-    g.moveTo(sx,sy-7);g.lineTo(sx,sy-24);
-    g.lineTo(sx+5+wave,sy-16);
-    g.moveTo(sx,sy-21);g.lineTo(sx-5,sy-13);
-    g.moveTo(sx,sy-7);g.lineTo(sx-4,sy+4);g.moveTo(sx,sy-7);g.lineTo(sx+4,sy+4);
-    g.stroke();
-    g.fillStyle='#b8e6ff';g.beginPath();g.arc(sx,sy-27,3.5,0,TAU);g.fill();
-  }
 
   // Draw standing NPCs
   for(let i=0;i<world.npcs.length;i++){
@@ -530,10 +510,19 @@ function drawBuggy(){
   }
 
   if(player.boost>0){
-    const py=(groundY(player.x-24)||player.y+12)-camY;
-    g.strokeStyle='#f7d58d';g.lineWidth=3;
-    g.beginPath();g.moveTo(sx-24,py-8);g.lineTo(sx-24,py-26);g.lineTo(sx-16,py-18);g.moveTo(sx-24,py-24);g.lineTo(sx-30,py-14);g.stroke();
-    g.fillStyle='#f7d58d';g.beginPath();g.arc(sx-24,py-30,4,0,TAU);g.fill();
+    const py=(groundY(player.x-40)||player.y+12)-camY;
+    const runPhase=tNow*8;
+    const legLift=Math.abs(Math.sin(runPhase))*6;
+    const legBack=Math.sin(runPhase)*3;
+    g.strokeStyle='#f7d58d';g.lineWidth=3;g.lineCap='round';
+    g.beginPath();
+    g.moveTo(sx-40,py-8);g.lineTo(sx-40,py-36);
+    g.moveTo(sx-40,py-28);g.lineTo(sx-40+6,py-24);
+    g.moveTo(sx-40,py-30);g.lineTo(sx-40-6,py-22);
+    g.moveTo(sx-40,py-8);g.lineTo(sx-40+2+legBack,py-4+legLift);
+    g.moveTo(sx-40,py-8);g.lineTo(sx-40-2-legBack,py-4-legLift);
+    g.stroke();
+    g.fillStyle='#f7d58d';g.beginPath();g.arc(sx-40,py-40,4,0,TAU);g.fill();
   }
 
   if(player.have>0){
@@ -557,13 +546,20 @@ function drawBuggy(){
   g.rotate(player.ang+nodAngle);
 
   g.fillStyle='#302720';
-  g.beginPath();g.arc(-14,8,7,0,TAU);g.arc(14,8,7,0,TAU);g.fill();
-  g.fillStyle='#9a7a4c';
-  g.fillRect(-21,-6,42,12);
-  g.fillStyle='#d7c19c';
-  g.fillRect(-7,-14,18,8);
+  g.fillRect(-28,-4,56,8);
+  g.beginPath();g.arc(-20,6,5,0,TAU);g.arc(20,6,5,0,TAU);g.fill();
+  g.fillStyle='#4a3a2a';
+  g.fillRect(-18,-6,36,6);
+  g.strokeStyle='#1a1a1a';
+  g.lineWidth=2.5;
+  g.beginPath();
+  g.moveTo(-20,-6);
+  g.lineTo(-24,-18);
+  g.stroke();
+  g.fillStyle='#cc0000';
+  g.beginPath();g.arc(-24,-18,2,0,TAU);g.fill();
   g.fillStyle='#ffe9c6';
-  g.fillRect(-22,-2,4,4);
+  g.fillRect(22,-2,6,4);
 
   g.restore();
 }
@@ -669,18 +665,103 @@ function render(){
   g.textAlign='left';
 
   if(mode==='title'){
-    g.fillStyle='rgba(0,0,0,.46)';g.fillRect(W*0.5-250,H*0.18,500,250);
-    g.fillStyle='#fff';
-    g.font='800 '+Math.max(34,W*0.06)+'px system-ui,sans-serif';
     g.textAlign='center';
-    g.fillText('BUGGY DOWNHILL',W*0.5,H*0.29);
-    g.font='600 16px system-ui,sans-serif';
-    g.fillText('Schenley Park rush. Collect pushers. Dodge potholes. Clear broken bridges.',W*0.5,H*0.36);
-    g.fillText('A = Call Pusher | S / Down = Brake | Space / Up = Action',W*0.5,H*0.4);
-    g.fillStyle='#ffe08f';g.font='800 28px system-ui,sans-serif';
-    g.fillText('TAP TO START',W*0.5,H*0.51+Math.sin(tNow*4)*4);
-    g.fillStyle='#fff';g.font='600 14px system-ui,sans-serif';
-    g.fillText('Keep moving downhill. If speed hits zero or you crash, run ends.',W*0.5,H*0.58);
+    if(tutorialStep===0){
+      g.fillStyle='#fff';
+      g.font='800 '+Math.max(42,W*0.07)+'px system-ui,sans-serif';
+      g.fillText('BUGGY ON',W*0.5,H*0.4);
+      g.font='600 '+Math.max(20,W*0.035)+'px system-ui,sans-serif';
+      g.fillText('CMU Tradition on Flagstaff Hill',W*0.5,H*0.48);
+    }else if(tutorialStep===1){
+      g.font='600 14px system-ui,sans-serif';
+      const text='You can hold up to 5 pushers at once';
+      const m=g.measureText(text);
+      const pad=24;
+      const boxW=m.width+pad*2;
+      const boxH=50+pad*2;
+      const boxX=W*0.5-boxW*0.5;
+      const boxY=H*0.5-boxH*0.5;
+      g.fillStyle='rgba(0,0,0,.46)';g.fillRect(boxX,boxY,boxW,boxH);
+      g.fillStyle='#fff';
+      g.fillText(text,W*0.5,boxY+boxH*0.5+5);
+      player.have=5;
+      drawBuggy();
+      player.have=0;
+    }else if(tutorialStep===2){
+      g.font='600 14px system-ui,sans-serif';
+      const text='Click to activate a pusher when you need a boost';
+      const m=g.measureText(text);
+      const pad=24;
+      const boxW=m.width+pad*2;
+      const boxH=50+pad*2;
+      const boxX=W*0.5-boxW*0.5;
+      const boxY=H*0.5-boxH*0.5;
+      g.fillStyle='rgba(0,0,0,.46)';g.fillRect(boxX,boxY,boxW,boxH);
+      g.fillStyle='#fff';
+      g.fillText(text,W*0.5,boxY+boxH*0.5+5);
+      const bx=btn.call.x,by=btn.call.y,br=btn.call.r;
+      g.strokeStyle='#ffe08f';g.lineWidth=4;
+      g.beginPath();g.arc(bx,by,br+8,0,TAU);g.stroke();
+      g.beginPath();g.moveTo(W*0.5,boxY+boxH);g.lineTo(bx,by-br-8);
+      g.lineTo(bx-8,by-br);g.moveTo(bx,by-br-8);g.lineTo(bx+8,by-br);
+      g.stroke();
+    }else if(tutorialStep===3){
+      g.font='600 14px system-ui,sans-serif';
+      const text='Use this to either 1 dodge potholes or 2 pick up pushers';
+      const m=g.measureText(text);
+      const pad=24;
+      const boxW=m.width+pad*2;
+      const boxH=50+pad*2;
+      const boxX=W*0.5-boxW*0.5;
+      const boxY=H*0.5-boxH*0.5;
+      g.fillStyle='rgba(0,0,0,.46)';g.fillRect(boxX,boxY,boxW,boxH);
+      g.fillStyle='#fff';
+      g.fillText(text,W*0.5,boxY+boxH*0.5+5);
+      const bx=btn.act.x,by=btn.act.y,br=btn.act.r;
+      g.strokeStyle='#ffe08f';g.lineWidth=4;
+      g.beginPath();g.arc(bx,by,br+8,0,TAU);g.stroke();
+      g.beginPath();g.moveTo(W*0.5,boxY+boxH);g.lineTo(bx,by-br-8);
+      g.lineTo(bx-8,by-br);g.moveTo(bx,by-br-8);g.lineTo(bx+8,by-br);
+      g.stroke();
+    }else if(tutorialStep===4){
+      g.font='600 14px system-ui,sans-serif';
+      const text='Hope you know what this one does';
+      const m=g.measureText(text);
+      const pad=24;
+      const boxW=m.width+pad*2;
+      const boxH=50+pad*2;
+      const boxX=W*0.5-boxW*0.5;
+      const boxY=H*0.5-boxH*0.5;
+      g.fillStyle='rgba(0,0,0,.46)';g.fillRect(boxX,boxY,boxW,boxH);
+      g.fillStyle='#fff';
+      g.fillText(text,W*0.5,boxY+boxH*0.5+5);
+      const bx=btn.brake.x,by=btn.brake.y,br=btn.brake.r;
+      g.strokeStyle='#ffe08f';g.lineWidth=4;
+      g.beginPath();g.arc(bx,by,br+8,0,TAU);g.stroke();
+      g.beginPath();g.moveTo(W*0.5,boxY+boxH);g.lineTo(bx,by-br-8);
+      g.lineTo(bx-8,by-br);g.moveTo(bx,by-br-8);g.lineTo(bx+8,by-br);
+      g.stroke();
+    }else{
+      g.font='600 14px system-ui,sans-serif';
+      const lines=['Looks like all of Pittsburgh\'s 446 bridges are down too,','so you\'ll have to jump them!','If you run out of speed or you crash, run ends.'];
+      let maxW=0;
+      for(let i=0;i<lines.length;i++){
+        const w=g.measureText(lines[i]).width;
+        if(w>maxW) maxW=w;
+      }
+      const pad=24;
+      const boxW=maxW+pad*2;
+      const boxH=lines.length*22+pad*2;
+      const boxX=W*0.5-boxW*0.5;
+      const boxY=H*0.5-boxH*0.5-40;
+      g.fillStyle='rgba(0,0,0,.46)';g.fillRect(boxX,boxY,boxW,boxH);
+      g.fillStyle='#fff';
+      for(let i=0;i<lines.length;i++){
+        g.fillText(lines[i],W*0.5,boxY+pad+18+i*22);
+      }
+      g.fillStyle='#ffe08f';g.font='800 24px system-ui,sans-serif';
+      g.fillText('TAP TO START',W*0.5,boxY+boxH+50+Math.sin(tNow*4)*4);
+    }
     g.textAlign='left';
   }
 
@@ -711,6 +792,10 @@ function update(dt){
   tNow+=dt;
   if(mode==='play'&&W>=H) updatePlay(dt);
   else{
+    if(mode==='title'){
+      tutorialTimer+=dt;
+      if(tutorialTimer>=2&&tutorialStep<5) tutorialStep++,tutorialTimer=0;
+    }
     ensureWorld(player.x+W+1200);
     const gy=groundY(player.x)||320;
     camX+=(player.x-W*0.33-camX)*Math.min(1,dt*3.2);
@@ -749,6 +834,16 @@ function hitButton(x,y){
 function pointerDown(e){
   audioInit();
   const k=hitButton(e.clientX,e.clientY);
+  if(mode==='title'){
+    if(tutorialStep<5){
+      tutorialStep++;
+      tutorialTimer=0;
+    }else{
+      resetRun();
+    }
+    e.preventDefault();
+    return;
+  }
   if(mode!=='play'){
     resetRun();
     e.preventDefault();
