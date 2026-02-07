@@ -56,8 +56,7 @@ let camX=0,camY=0,rollT=0;
 let tutorialStep=0,tutorialTimer=0;
 const input={call:0,act:0};
 
-// --- Online features (wifi toggle) ---
-const API=location.port==='8000'?'http://192.168.1.222:3001':'';
+const API=(document.querySelector('meta[name="API"]')||{content:'https://points-chosen-ted-united.trycloudflare.com'}).content;
 let wifiOn=0,lbData=[],deathData=[],deathFetched=0;
 let nameInput='',nameConfirmed=0,nameFocused=0,scoreSubmitted=0,lbScroll=0,nameBoxRect=null;
 function fetchLB(){
