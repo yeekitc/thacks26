@@ -10,13 +10,12 @@ INDEX_SRC="${SRC_DIR}/index.html"
 CSS_SRC="${SRC_DIR}/style.css"
 JS_SRC="${SRC_DIR}/game.js"
 INDEX_OUT="${BUILD_DIR}/index.html"
-CSS_OUT="${BUILD_DIR}/style.css"
-JS_OUT="${BUILD_DIR}/game.js"
+JS_TMP="${BUILD_DIR}/game.build.tmp.js"
 TAR_FILE="${BUILD_DIR}/game.tar"
 SIZE_LIMIT=15360
 ARCHIVE_FILE=""
 
-for cmd in cp tar wc; do
+for cmd in cat cp tar wc; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
         echo "Error: required command '$cmd' is not available"
         exit 1
@@ -26,9 +25,11 @@ done
 HAS_BROTLI=0
 HAS_ZSTD=0
 HAS_GZIP=0
+HAS_BUN=0
 command -v brotli >/dev/null 2>&1 && HAS_BROTLI=1
 command -v zstd >/dev/null 2>&1 && HAS_ZSTD=1
 command -v gzip >/dev/null 2>&1 && HAS_GZIP=1
+command -v bun >/dev/null 2>&1 && HAS_BUN=1
 
 if [ "$HAS_BROTLI" -eq 0 ] && [ "$HAS_ZSTD" -eq 0 ] && [ "$HAS_GZIP" -eq 0 ]; then
     echo "Error: no supported compressor found (need one of: brotli, zstd, gzip)"
@@ -45,14 +46,27 @@ done
 echo "Building..."
 
 mkdir -p "$BUILD_DIR"
-rm -f "$INDEX_OUT" "$CSS_OUT" "$JS_OUT" "$TAR_FILE" \
+rm -f "$INDEX_OUT" "$JS_TMP" "$TAR_FILE" \
+    "${BUILD_DIR}/style.css" "${BUILD_DIR}/game.js" \
     "${BUILD_DIR}/game.tar.br" "${BUILD_DIR}/game.tar.zst" "${BUILD_DIR}/game.tar.gz"
 
-cp "$INDEX_SRC" "$INDEX_OUT"
-cp "$CSS_SRC" "$CSS_OUT"
-cp "$JS_SRC" "$JS_OUT"
+if [ "$HAS_BUN" -eq 1 ]; then
+    bun build "$JS_SRC" --minify --target=browser --outfile "$JS_TMP" >/dev/null
+else
+    cp "$JS_SRC" "$JS_TMP"
+fi
 
-LC_ALL=C tar -C "$BUILD_DIR" -cf "$TAR_FILE" index.html style.css game.js
+{
+    printf '<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><meta name=apple-mobile-web-app-capable content=yes><meta name=apple-mobile-web-app-status-bar-style content=black-translucent><meta name=mobile-web-app-capable content=yes><title>Buggy Downhill</title><style>'
+    cat "$CSS_SRC"
+    printf '</style><canvas id=c></canvas><script>'
+    cat "$JS_TMP"
+    printf '</script>'
+} > "$INDEX_OUT"
+
+rm -f "$JS_TMP"
+
+LC_ALL=C tar -C "$BUILD_DIR" -cf "$TAR_FILE" index.html
 
 if [ "$HAS_BROTLI" -eq 1 ]; then
     brotli -f -q 11 "$TAR_FILE" -o "${BUILD_DIR}/game.tar.br"

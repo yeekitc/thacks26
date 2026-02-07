@@ -15,7 +15,7 @@ No runtime network requests allowed
 Two preliminary clarifications:
 Judging at hackathons is very rushed, we likely will only have 2-3 minutes for your game. 
 To get points for "completeness" you need to make sure that within that time we can figure out the game on our own (no verbal instructions from you), and start playing.
-To make judging easier we want you submit: 
+To make judging easier we want you to submit: 
 A link to your game (not going to check size limits here), just to make judging easier. The final artifact will be used to validate that you did not cheat however (works with no wifi, under 15KB, must be the same game as the one on the link)
 *Please see the script at the end of the doc.*
 

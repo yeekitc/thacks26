@@ -6,12 +6,13 @@
 ```
 
 This will:
-1. Copy split source files from `src/`:
-   - `src/index.html`
+1. Read source files from `src/`:
    - `src/style.css`
    - `src/game.js`
-2. Write package payload files to `build/`
-3. Compress into the smallest supported artifact format:
+2. Use a compact HTML shell for packaging (equivalent to `src/index.html`)
+3. Build a single self-contained `build/index.html` (inline CSS + JS)
+4. Minify JS during build if `bun` is installed (fallback: raw JS)
+5. Compress into the smallest supported artifact format:
    - `build/game.tar.br` (preferred when `brotli` is installed)
    - or `build/game.tar.zst`
    - or `build/game.tar.gz`
