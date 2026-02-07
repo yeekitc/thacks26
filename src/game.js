@@ -66,8 +66,10 @@ const _B=[
 function _bObj(a){return{len:a[0],sky:[a[1],a[2],a[3]],sun:a[4],moon:a[5],stars:a[6],mtn:[a[7],a[8],a[9]],gnd:[a[10],a[11],a[12]],tree:[a[13],a[14]],trunk:a[15],cloud:a[16]}}
 const BIOMES=_B.map(_bObj);
 const _BC=BIOMES.reduce((s,b)=>s+b.len,0);
-let curBiome=BIOMES[0];
+let curBiome=BIOMES[0],lastDist=-999;
 function calcBiome(dist){
+  if(Math.abs(dist-lastDist)<5) return;
+  lastDist=dist;
   let d=((dist%_BC)+_BC)%_BC,acc=0;
   for(let i=0;i<BIOMES.length;i++){
     const b=BIOMES[i],nx=BIOMES[(i+1)%BIOMES.length];
@@ -122,12 +124,12 @@ safeProbe.style.cssText='position:fixed;padding:env(safe-area-inset-top) env(saf
 document.body.appendChild(safeProbe);
 let safeL=0,safeR=0,safeT=0,safeB=0;
 function resize(){
-  const dpr=Math.min(devicePixelRatio||1,2);
+  const dpr=mn(devicePixelRatio||1,2);
   const vv=window.visualViewport;
   const sw=vv?vv.width:innerWidth,sh=vv?vv.height:innerHeight;
   const touchDevice=(navigator.maxTouchPoints||0)>0;
-  const screenShort=Math.max(1,Math.min(screen.width||sw,screen.height||sh));
-  const chromeLossPx=Math.max(0,screenShort-sh);
+  const screenShort=mx(1,mn(screen.width||sw,screen.height||sh));
+  const chromeLossPx=mx(0,screenShort-sh);
   chromeLossRatio=(touchDevice&&sw>=sh)?clamp(chromeLossPx/screenShort,0,0.35):0;
   camFollowY=clamp(CAM_FOLLOW_Y-chromeLossRatio*0.44,0.34,CAM_FOLLOW_Y);
   W=sw/ZOOM;H=sh/ZOOM;
@@ -142,14 +144,14 @@ function resize(){
   layoutButtons();
 }
 function layoutButtons(){
-  const pad=Math.max(18,Math.min(W,H)*0.03);
+  const pad=mx(18,mn(W,H)*0.03);
   const rScale=1-chromeLossRatio*0.26;
-  const r=Math.max(38,Math.min(W,H)*0.115*rScale)*1.15;
-  const leftPad=Math.max(pad*1.8,safeL+pad*0.5);
-  const rightPad=Math.max(pad*1.8,safeR+pad*0.5);
-  const chromeLift=Math.max(0,H*chromeLossRatio*0.18);
-  const bottomPad=Math.max(pad*2.2,safeB+pad*0.5)+chromeLift;
-  const buttonLift=Math.max(10,r*0.18);
+  const r=mx(38,mn(W,H)*0.115*rScale)*1.15;
+  const leftPad=mx(pad*1.8,safeL+pad*0.5);
+  const rightPad=mx(pad*1.8,safeR+pad*0.5);
+  const chromeLift=mx(0,H*chromeLossRatio*0.18);
+  const bottomPad=mx(pad*2.2,safeB+pad*0.5)+chromeLift;
+  const buttonLift=mx(10,r*0.18);
   btn.act.x=leftPad+r;btn.act.y=H-bottomPad-r-buttonLift;btn.act.r=r;
   btn.call.x=W-rightPad-r;btn.call.y=H-bottomPad-r-buttonLift;btn.call.r=r;
 }
@@ -187,6 +189,7 @@ function sfx(name){
 function rr(a,b){return a+Math.random()*(b-a)}
 function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
 function lerp(a,b,t){return a+(b-a)*t}
+const mx=(a,b)=>a>b?a:b,mn=(a,b)=>a<b?a:b;
 function easeOutBack(t){
   const c1=1.70158,c3=c1+1;
   return 1+c3*Math.pow(t-1,3)+c1*Math.pow(t-1,2);
@@ -235,15 +238,15 @@ function drawCenterCues(){
     }
     let alpha=0.8;
     if(p<0.12) alpha*=p/0.12;
-    else if(p>0.82) alpha*=Math.max(0,1-(p-0.82)/0.18);
-    const sz=Math.max(28,m.size*2);
-    const y=cy-(centerCues.length-1-i)*Math.max(34,sz*0.62);
+    else if(p>0.82) alpha*=mx(0,1-(p-0.82)/0.18);
+    const sz=mx(28,m.size*2);
+    const y=cy-(centerCues.length-1-i)*mx(34,sz*0.62);
     g.save();
     g.translate(cx,y);
     g.scale(scale,scale);
     g.globalAlpha=alpha;
     g.font='italic '+m.weight+' '+Math.round(sz)+'px system-ui,sans-serif';
-    g.lineWidth=Math.max(4,sz*0.1);
+    g.lineWidth=mx(4,sz*0.1);
     g.lineJoin='round';
     g.strokeStyle=m.stroke;
     g.strokeText(m.text,0,0);
@@ -271,7 +274,7 @@ function segAt(x){
     else if(x>p[m+1].x) lo=m+1;
     else return m;
   }
-  return Math.max(0,Math.min(p.length-2,lo));
+  return mx(0,mn(p.length-2,lo));
 }
 function gapAt(x){
   const a=world.gaps;
@@ -354,7 +357,7 @@ function findGroundTouch(prevX,prevY,nextX,nextY){
     if(gy==null||nextY<gy-BUGGY.rideHeight) return null;
     return {x:nextX,y:gy-BUGGY.rideHeight,gy,slope:slopeAt(nextX)};
   }
-  const steps=Math.max(4,Math.ceil(Math.abs(dx)/3));
+  const steps=mx(4,Math.ceil(Math.abs(dx)/3));
   let t0=0;
   for(let s=1;s<=steps;s++){
     const t1=s/steps;
@@ -385,7 +388,7 @@ function addPoint(x,y,s,k){
   if(k) pt.k=1;
   world.pts.push(pt);
   world.lastX=x;world.lastY=y;
-  world.deepY=Math.max(world.deepY,y);
+  world.deepY=mx(world.deepY,y);
 }
 function chooseTerrainMode(x0){
   const distToGap=world.nextGap-x0;
@@ -408,7 +411,7 @@ function nextTerrainSlope(x0){
   t.hold--;
   const turn=t.mode==='drop'?0.15:t.mode==='flow'?0.11:0.09;
   const jit=t.mode==='drop'?0.030:t.mode==='flow'?0.022:0.018;
-  const delta=Math.max(-turn,Math.min(turn,t.target-t.slope));
+  const delta=mx(-turn,mn(turn,t.target-t.slope));
   t.slope+=delta+(Math.random()*2-1)*jit;
   if(Math.abs(t.slope)<GEN.terrain.flatCut) t.flat++;
   else t.flat=0;
@@ -417,7 +420,7 @@ function nextTerrainSlope(x0){
     t.modeLeft=2;t.hold=2;t.flat=0;
   }
   if(x0<900&&t.slope<0.30) t.slope=rr(0.30,0.46);
-  t.slope=Math.max(GEN.terrain.min,Math.min(GEN.terrain.max,t.slope));
+  t.slope=mx(GEN.terrain.min,mn(GEN.terrain.max,t.slope));
   return t.slope;
 }
 function spawnEntities(fromX,toX){
@@ -1279,12 +1282,12 @@ function drawHud(){
   const bw=Math.round(Math.min(W*0.4,btn.act.r*3.5)),bh=Math.round(12*s);
   const bx=W*0.5-bw*0.5;
   const speedPad=Math.max(18,Math.min(W,H)*0.03);
-  const chromeLift=Math.max(0,H*chromeLossRatio*0.18);
-  const speedBottomPad=Math.max(speedPad*0.8,safeB+speedPad*0.3)+chromeLift*0.5;
+  const chromeLift=mx(0,H*chromeLossRatio*0.18);
+  const speedBottomPad=mx(speedPad*0.8,safeB+speedPad*0.3)+chromeLift*0.5;
   const by=H-speedBottomPad-bh;
   const v=Math.min(1,player.speed/420);
   const br=bh*0.5;
-  g.globalAlpha=0.35;g.fillStyle='#fff';g.font='600 '+Math.max(10,Math.round(11*s))+'px system-ui,sans-serif';
+  g.globalAlpha=0.35;g.fillStyle='#fff';g.font='600 '+mx(10,Math.round(11*s))+'px system-ui,sans-serif';
   g.textAlign='center';g.fillText('SPEED',W*0.5,by-4);g.textAlign='left';
   g.globalAlpha=0.45;g.fillStyle='#000';
   roundRect(bx,by,bw,bh,br);g.fill();
@@ -1293,7 +1296,7 @@ function drawHud(){
   if(v>0){roundRect(bx+1,by+1,(bw-2)*v,bh-2,br-1);g.fill();}
   g.globalAlpha=1;
   if(API){
-    const ws=Math.max(18,Math.round(22*s));
+    const ws=mx(18,Math.round(22*s));
     const wx=pad+safeL,wy=pad+safeT;
     g.globalAlpha=wifiOn?0.8:0.35;
     g.strokeStyle='#fff';g.lineWidth=Math.max(1.5,2*s);g.lineCap='round';
@@ -1396,13 +1399,13 @@ function getPusherReserveMetrics(){
   const maxSlots=player.maxHave;
   if(maxSlots<=0) return null;
   const scale=1.15;
-  const slotW=Math.max(20,btn.call.r*0.34)*scale;
+  const slotW=mx(20,btn.call.r*0.34)*scale;
   const slotH=Math.round(slotW*1.2);
-  const gap=Math.max(8,slotW*0.2);
+  const gap=mx(8,slotW*0.2);
   const totalW=maxSlots*slotW+(maxSlots-1)*gap;
   const sx=btn.call.x-totalW*0.5;
   const sy=btn.call.y+btn.call.r+12;
-  const labelSize=Math.max(10,Math.round(btn.call.r*0.15))*scale;
+  const labelSize=mx(10,Math.round(btn.call.r*0.15))*scale;
   const labelY=sy+slotH+Math.max(13,btn.call.r*0.18);
   return {maxSlots,slotW,slotH,gap,totalW,sx,sy,labelSize,labelY};
 }
@@ -1414,7 +1417,7 @@ function tutorialFocusTarget(){
     return {
       x:btn.call.x,
       y:r.sy+r.slotH*0.58,
-      r:Math.max(r.totalW*0.44,r.slotH*1.8),
+      r:mx(r.totalW*0.44,r.slotH*1.8),
       key:'reserve'
     };
   }
@@ -1480,19 +1483,19 @@ function drawButton(b,key){
   g.fillStyle=disabled?'#e1e1e1':'#fff';
   g.textAlign='center';
   if(b.icon){
-    g.font='italic 800 '+Math.max(22,b.r*0.52)+'px system-ui,sans-serif';
+    g.font='italic 800 '+mx(22,b.r*0.52)+'px system-ui,sans-serif';
     g.fillText(b.icon,b.x,b.y-2);
-    g.font='italic 800 '+Math.max(14,b.r*0.288)+'px system-ui,sans-serif';
-    g.fillText(String(b.label||'').toUpperCase(),b.x,b.y+Math.max(15,b.r*0.34));
+    g.font='italic 800 '+mx(14,b.r*0.288)+'px system-ui,sans-serif';
+    g.fillText(String(b.label||'').toUpperCase(),b.x,b.y+mx(15,b.r*0.34));
   }else{
     const label=String(b.label||'').toUpperCase();
     if(key==='call'&&label==='CALL PUSHER'){
-      g.font='italic 800 '+Math.max(17,b.r*0.312)+'px system-ui,sans-serif';
-      g.fillText('CALL',b.x,b.y-Math.max(2,b.r*0.1));
-      g.font='italic 800 '+Math.max(16,b.r*0.299)+'px system-ui,sans-serif';
-      g.fillText('PUSHER',b.x,b.y+Math.max(16,b.r*0.36));
+      g.font='italic 800 '+mx(17,b.r*0.312)+'px system-ui,sans-serif';
+      g.fillText('CALL',b.x,b.y-mx(2,b.r*0.1));
+      g.font='italic 800 '+mx(16,b.r*0.299)+'px system-ui,sans-serif';
+      g.fillText('PUSHER',b.x,b.y+mx(16,b.r*0.36));
     }else{
-      g.font='italic 800 '+Math.max(17,b.r*0.36)+'px system-ui,sans-serif';
+      g.font='italic 800 '+mx(17,b.r*0.36)+'px system-ui,sans-serif';
       g.fillText(label,b.x,b.y+5);
     }
   }
@@ -1955,6 +1958,7 @@ function keyDown(e){
   if(e.repeat&&(e.key==='a'||e.key==='A'||e.key===' '||e.key==='ArrowUp')) return;
   if(e.key==='w'&&API&&!(mode==='over'&&nameFocused)){
     wifiOn=wifiOn?0:1;
+    if(!wifiOn&&mode==='over'){nameFocused=0;nameBoxRect=null;}
     if(wifiOn){deathFetched=0;fetchLB();fetchDeaths();}
     return;
   }
@@ -1999,6 +2003,7 @@ function pointerDown(e){
     const pad=Math.round(14*s);
     if(px>=pad+safeL&&px<=pad+safeL+ws+10&&py>=pad+safeT&&py<=pad+safeT+ws+10){
       wifiOn=wifiOn?0:1;
+      if(!wifiOn&&mode==='over'){nameFocused=0;nameBoxRect=null;}
       if(wifiOn){deathFetched=0;fetchLB();fetchDeaths();}
       e.preventDefault();return;
     }
