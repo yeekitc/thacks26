@@ -39,9 +39,12 @@ function resize(){
 function layoutButtons(){
   const pad=Math.max(18,Math.min(W,H)*0.03);
   const r=Math.max(42,Math.min(W,H)*0.115);
-  btn.call.x=pad+r;btn.call.y=H-pad-r;btn.call.r=r;
-  btn.brake.x=W-pad-r;btn.brake.y=H-pad-r;btn.brake.r=r;
-  btn.act.x=W-pad-r;btn.act.y=H-pad-r*2.75;btn.act.r=r*0.9;
+  const leftPad=pad*1.8;
+  const rightPad=pad*1.8;
+  const bottomPad=pad*2.2;
+  btn.act.x=leftPad+r;btn.act.y=H-bottomPad-r;btn.act.r=r;
+  btn.call.x=W-rightPad-r;btn.call.y=H-bottomPad-r;btn.call.r=r;
+  btn.brake.x=W-rightPad-r;btn.brake.y=H-bottomPad-r-r*2.2;btn.brake.r=r*0.85;
 }
 
 function audioInit(){
@@ -531,6 +534,17 @@ function drawBuggy(){
     g.fillStyle='#f7d58d';g.beginPath();g.arc(sx-24,py-30,4,0,TAU);g.fill();
   }
 
+  if(player.have>0){
+    const headY=sy-28+Math.sin(tNow*3)*2;
+    const spacing=8;
+    const startX=sx-(player.have-1)*spacing*0.5;
+    for(let i=0;i<player.have;i++){
+      const hx=startX+i*spacing;
+      const hy=headY+Math.sin(tNow*4+i*0.8)*1.5;
+      g.fillStyle='#b8e6ff';g.beginPath();g.arc(hx,hy,2.5,0,TAU);g.fill();
+    }
+  }
+
   g.save();
   g.translate(sx,sy);
   g.rotate(player.ang);
@@ -570,14 +584,6 @@ function drawHud(){
   g.fillStyle='rgba(0,0,0,.35)';g.fillRect(265,18,170,16);
   g.fillStyle=v>.67?'#67e18f':v>.34?'#ffd36a':'#ff8c5a';g.fillRect(267,20,166*v,12);
   g.strokeStyle='rgba(255,255,255,.4)';g.strokeRect(265,18,170,16);
-
-  g.fillStyle='rgba(0,0,0,.35)';g.fillRect(W-210,12,196,56);
-  g.fillStyle='#fff';g.font='700 13px system-ui,sans-serif';
-  g.fillText('PUSHERS',W-196,31);
-  g.font='700 15px system-ui,sans-serif';
-  const ps=player.boost>0?'PUSHING ('+player.have+')':player.have>0?player.have+'/'+player.maxHave+' READY':'NONE';
-  g.fillStyle=player.boost>0?'#ffe28f':player.have>0?'#94ecbe':'#f4b5a6';
-  g.fillText(ps,W-196,53);
 
   if(hintT>0){
     const a=Math.min(1,hintT)*Math.min(1,tNow*0.7);
