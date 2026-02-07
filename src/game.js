@@ -1651,8 +1651,8 @@ function tutBox(text,hb){
   const preferredY=focus?focus.y-focus.r-bh-118:H*0.30-bh*0.5;
   const by=Math.max(14,Math.min(H-bh-22,preferredY));
   const grad=g.createLinearGradient(bx,by,bx,by+bh);
-  grad.addColorStop(0,'rgba(20,23,28,.95)');
-  grad.addColorStop(1,'rgba(28,31,36,.92)');
+  grad.addColorStop(0,'rgba(20,23,28,.75)');
+  grad.addColorStop(1,'rgba(28,31,36,.72)');
   g.fillStyle=grad;
   roundRect(bx,by,bw,bh,12);g.fill();
   g.strokeStyle='rgba(221,230,240,.48)';g.lineWidth=2;g.stroke();
@@ -1808,8 +1808,8 @@ function render(){
       const bw=Math.min(W*0.9,560),bh=188;
       const bx=W*0.5-bw*0.5,by=Math.max(40,H*0.2);
       const card=g.createLinearGradient(bx,by,bx,by+bh);
-      card.addColorStop(0,'rgba(20,23,28,.96)');
-      card.addColorStop(1,'rgba(15,18,23,.94)');
+      card.addColorStop(0,'rgba(20,23,28,.75)');
+      card.addColorStop(1,'rgba(15,18,23,.72)');
       g.fillStyle=card;
       roundRect(bx,by,bw,bh,14);g.fill();
       g.strokeStyle='rgba(220,230,240,.24)';
