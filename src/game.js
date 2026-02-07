@@ -25,7 +25,8 @@ const world={
 const player={
   x:80,y:0,vx:0,vy:0,speed:85,
   on:1,ang:0,airY:0,stall:0,
-  have:0,boost:0,swerve:0,maxHave:5,potholeDip:0
+  have:0,boost:0,swerve:0,maxHave:5,potholeDip:0,
+  pusherIncoming:0,pusherStartX:0
 };
 
 const particles=[];
@@ -248,7 +249,7 @@ function resetRun(){
   world.lastX=0;world.lastY=320;
   world.nextPot=320;world.nextNpc=240;world.nextGap=760;
   player.x=80;player.speed=85;player.vx=0;player.vy=0;player.on=1;player.ang=0;
-  player.have=0;player.boost=0;player.swerve=0;player.airY=0;player.stall=0;player.potholeDip=0;
+  player.have=0;player.boost=0;player.swerve=0;player.airY=0;player.stall=0;player.potholeDip=0;player.pusherIncoming=0;player.pusherStartX=0;
   btnFloats.length=0;actPulse=0;
   ensureWorld(player.x+2200);
   const gy=groundY(player.x)||320;
@@ -310,8 +311,10 @@ function tryAction(){
 
 function tryCall(){
   if(mode!=='play') return;
-  if(player.have>0&&player.boost<=0){
-    player.have--;player.boost=3.2;
+  if(player.have>0&&player.boost<=0&&player.pusherIncoming<=0){
+    player.have--;
+    player.pusherIncoming=1.0;
+    player.pusherStartX=camX-40;
     sfx('boost');burst(player.x-15,player.y+8,14,'#ffde94',150);
   }
 }
@@ -321,6 +324,14 @@ function updatePlay(dt){
 
   if(input.call){tryCall();input.call=0;}
   if(input.act){tryAction();input.act=0;}
+
+  if(player.pusherIncoming>0){
+    player.pusherIncoming=Math.max(0,player.pusherIncoming-dt);
+    if(player.pusherIncoming<=0){
+      player.boost=3.2;
+      burst(player.x-15,player.y+8,14,'#ffde94',150);
+    }
+  }
 
   if(player.boost>0){
     player.boost=Math.max(0,player.boost-dt);
@@ -567,6 +578,42 @@ function drawBuggy(){
     const sh=Math.max(0,Math.min(1,(gy-player.y)/180));
     g.fillStyle='rgba(0,0,0,'+(0.14+0.2*sh).toFixed(3)+')';
     g.beginPath();g.ellipse(sx,gy-camY+10,20+sh*10,6+sh*2,0,0,TAU);g.fill();
+  }
+
+  if(player.pusherIncoming>0){
+    const t=1-player.pusherIncoming;
+    const eased=1-Math.pow(1-t,2);
+    const targetX=player.x-40;
+    const px=player.pusherStartX+(targetX-player.pusherStartX)*eased;
+    const pScreenX=px-camX;
+    let pGroundY;
+    const pGap=gapAt(px);
+    if(pGap){
+      const ya=groundY(pGap.a)||player.y+12;
+      const yb=groundY(pGap.b)||player.y+12;
+      const gapT=(px-pGap.a)/(pGap.b-pGap.a);
+      pGroundY=(ya+(yb-ya)*gapT)-camY;
+    }else{
+      pGroundY=(groundY(px)||player.y+12)-camY;
+    }
+    const runPhase=tNow*18;
+    const legLift=Math.abs(Math.sin(runPhase))*10;
+    const legBack=Math.sin(runPhase)*6;
+    const armSwing=Math.sin(runPhase)*5;
+    const lean=-0.18;
+    g.save();
+    g.translate(pScreenX,pGroundY);
+    g.rotate(lean);
+    g.strokeStyle='#f7d58d';g.lineWidth=3;g.lineCap='round';
+    g.beginPath();
+    g.moveTo(0,-8);g.lineTo(0,-38);
+    g.moveTo(0,-30);g.lineTo(8+armSwing,-24);
+    g.moveTo(0,-30);g.lineTo(-8-armSwing,-22);
+    g.moveTo(0,-8);g.lineTo(3+legBack,-2+legLift);
+    g.moveTo(0,-8);g.lineTo(-3-legBack,-2-legLift);
+    g.stroke();
+    g.fillStyle='#f7d58d';g.beginPath();g.arc(0,-42,4.5,0,TAU);g.fill();
+    g.restore();
   }
 
   if(player.boost>0){
