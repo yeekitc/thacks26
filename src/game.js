@@ -1338,20 +1338,21 @@ function drawBuggy(){
   }
   g.rotate(player.ang+nodAngle);
 
-  g.fillStyle='#302720';
+  g.fillStyle='#C41230';
   g.fillRect(-28,-4,56,8);
+  g.fillStyle='#000000';
   g.beginPath();g.arc(-20,6,5,0,TAU);g.arc(20,6,5,0,TAU);g.fill();
-  g.fillStyle='#4a3a2a';
+  g.fillStyle='#C41230';
   g.fillRect(-18,-6,36,6);
-  g.strokeStyle='#1a1a1a';
+  g.strokeStyle='#C41230';
   g.lineWidth=2.5;
   g.beginPath();
   g.moveTo(-20,-6);
   g.lineTo(-24,-18);
   g.stroke();
-  g.fillStyle='#cc0000';
+  g.fillStyle='#FDB515';
   g.beginPath();g.arc(-24,-18,2,0,TAU);g.fill();
-  g.fillStyle='#ffe9c6';
+  g.fillStyle='#6D6E71';
   g.fillRect(22,-2,6,4);
 
   g.restore();
