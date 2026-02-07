@@ -33,9 +33,12 @@ Thumbs.db
 node_modules/
 package-lock.json
 
-# Python cache (from the HTTP server)
+# Python cache and virtual environment
 __pycache__/
 *.pyc
+venv/
+env/
+*.egg-info/
 
 # Temporary files
 tmp/

@@ -57,7 +57,7 @@ let tutorialStep=0,tutorialTimer=0;
 const input={call:0,act:0};
 
 // --- Online features (wifi toggle) ---
-const API=location.port==='8000'?'http://localhost:3001':'';
+const API=location.port==='8000'?'http://192.168.1.222:3001':'';
 let wifiOn=0,lbData=[],deathData=[],deathFetched=0;
 let nameInput='',nameConfirmed=0,nameFocused=0,scoreSubmitted=0,lbScroll=0,nameBoxRect=null;
 function fetchLB(){
