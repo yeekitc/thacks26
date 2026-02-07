@@ -2,8 +2,10 @@
 const c=document.getElementById('c'),g=c.getContext('2d',{alpha:false});
 let W=0,H=0;
 const TAU=Math.PI*2;
-const btn={call:{x:0,y:0,r:0,active:0,label:'CALL PUSHER'},brake:{x:0,y:0,r:0,active:0,label:'BRAKE'},act:{x:0,y:0,r:0,active:0,label:'ACTION'}};
+const btn={call:{x:0,y:0,r:0,active:0,label:'CALL PUSHER'},brake:{x:0,y:0,r:0,active:0,label:'BRAKE'},act:{x:0,y:0,r:0,active:0,label:'ACTION',disabled:true}};
 const brakePointers=new Set();
+let actPulse=0; // expanding ring timer when action becomes available
+const btnFloats=[]; // floating text items rising from action button
 let ac=null,master=null;
 let mode='title',reason='';
 let tNow=0,score=0,best=0,startX=0;
@@ -245,6 +247,7 @@ function resetRun(){
   world.nextPot=320;world.nextNpc=240;world.nextGap=760;
   player.x=80;player.speed=85;player.vx=0;player.vy=0;player.on=1;player.ang=0;
   player.have=0;player.boost=0;player.swerve=0;player.airY=0;player.stall=0;player.potholeDip=0;
+  btnFloats.length=0;actPulse=0;
   ensureWorld(player.x+2200);
   const gy=groundY(player.x)||320;
   player.y=gy-16;
@@ -292,12 +295,14 @@ function tryAction(){
   if(nearNpc&&(!nearPot||dN<=dP)){
     if(player.have<player.maxHave){
       nearNpc.got=1;player.have++;sfx('collect');
+      btnFloats.push({text:'+1 PUSHER',time:0.9,max:0.9,col:'#b8e6ff'});
     }
     return;
   }
   if(nearPot){
     nearPot.dodge=1;nearPot.flash=0.22;player.swerve=0.28;
     sfx('swerve');burst(nearPot.x,groundY(nearPot.x)-8,8,'#aad0ef',90);
+    btnFloats.push({text:'SWERVED!',time:0.9,max:0.9,col:'#ffe08f'});
   }
 }
 
@@ -600,16 +605,38 @@ function drawHud(){
 
 function drawButton(b,key){
   const active=(key==='brake'?input.brake:b.active>0);
-  const disabled=key==='call'&&player.have===0;
+  // allow per-button disabled flag (b.disabled) but keep existing call-specific rule
+  const callDisabled = (key==='call' && player.have===0);
+  const bDisabled = !!b.disabled;
+  const disabled = callDisabled || bDisabled;
   g.globalAlpha=disabled?0.3:active?0.9:0.62;
   g.fillStyle=disabled?'#666':key==='brake'?'#f06a4f':key==='call'?'#2e91d8':'#6fbf4f';
   g.beginPath();g.arc(b.x,b.y,b.r,0,TAU);g.fill();
   g.strokeStyle=disabled?'rgba(255,255,255,.4)':'rgba(255,255,255,.85)';g.lineWidth=3;g.stroke();
+
+  // Expanding pulse ring when action button becomes available
+  if(key==='act'&&actPulse>0){
+    const t=1-actPulse/0.38; // 0→1 over the pulse lifetime
+    const pulseR=b.r+t*22;
+    g.globalAlpha=Math.max(0,(1-t)*0.7);
+    g.strokeStyle='#ffe08f';g.lineWidth=3;
+    g.beginPath();g.arc(b.x,b.y,pulseR,0,TAU);g.stroke();
+    actPulse=Math.max(0,actPulse-1/60);
+  }
+
   g.globalAlpha=1;
   g.fillStyle=disabled?'#999':'#fff';
   g.textAlign='center';
-  g.font='700 '+Math.max(11,b.r*0.22)+'px system-ui,sans-serif';
-  g.fillText(b.label,b.x,b.y+4);
+  if(b.icon){
+    // Large icon above, smaller label below
+    g.font='700 '+Math.max(18,b.r*0.42)+'px system-ui,sans-serif';
+    g.fillText(b.icon,b.x,b.y-2);
+    g.font='700 '+Math.max(9,b.r*0.17)+'px system-ui,sans-serif';
+    g.fillText(b.label,b.x,b.y+Math.max(14,b.r*0.32));
+  }else{
+    g.font='700 '+Math.max(11,b.r*0.22)+'px system-ui,sans-serif';
+    g.fillText(b.label,b.x,b.y+4);
+  }
 }
 
 function render(){
@@ -659,9 +686,61 @@ function render(){
 
   if(mode==='play') drawHud();
 
+  // Update Action button label and disabled state based on nearby pots (potholes) or npcs (pushers)
+  {
+    const wasDisabled=btn.act.disabled;
+    let nearNpc=null,dN=9e9;
+    for(let i=0;i<world.npcs.length;i++){
+      const n=world.npcs[i];
+      if(n.got) continue;
+      const d=Math.abs(n.x-player.x);
+      if(d<64&&d<dN){nearNpc=n;dN=d;}
+    }
+    let nearPot=null,dP=9e9;
+    for(let i=0;i<world.pots.length;i++){
+      const p=world.pots[i];
+      if(p.done) continue;
+      const d=Math.abs(p.x-player.x);
+      if(d<72&&d<dP){nearPot=p;dP=d;}
+    }
+    if(nearNpc && (!nearPot || dN<=dP)){
+      btn.act.icon='\u2795';
+      btn.act.label='PUSHER';
+      btn.act.disabled=false;
+    } else if(nearPot){
+      btn.act.icon='\u21AA';
+      btn.act.label='SWERVE';
+      btn.act.disabled=false;
+    } else {
+      btn.act.icon='';
+      btn.act.label='ACTION';
+      btn.act.disabled=true;
+    }
+    // trigger pulse when action becomes available
+    if(wasDisabled&&!btn.act.disabled) actPulse=0.38;
+  }
+
   drawButton(btn.call,'call');
   drawButton(btn.brake,'brake');
   drawButton(btn.act,'act');
+
+  // Render floating text rising from the action button
+  for(let i=btnFloats.length-1;i>=0;i--){
+    const f=btnFloats[i];
+    f.time-=1/60;
+    if(f.time<=0){btnFloats.splice(i,1);continue;}
+    const t=1-f.time/f.max; // 0→1 over lifetime
+    const yOff=btn.act.r+20+t*55; // rise upward from button
+    const alpha=Math.max(0,1-t*1.3);
+    g.globalAlpha=alpha;
+    g.textAlign='center';
+    g.font='800 '+Math.max(13,btn.act.r*0.24)+'px system-ui,sans-serif';
+    g.strokeStyle='rgba(0,0,0,0.5)';g.lineWidth=4;
+    g.strokeText(f.text,btn.act.x,btn.act.y-yOff);
+    g.fillStyle=f.col;
+    g.fillText(f.text,btn.act.x,btn.act.y-yOff);
+  }
+  g.globalAlpha=1;
   g.textAlign='left';
 
   if(mode==='title'){
@@ -806,7 +885,7 @@ function keyDown(e){
   if(e.repeat&&(e.key==='a'||e.key==='A'||e.key===' '||e.key==='ArrowUp')) return;
   if(e.key==='s'||e.key==='S'||e.key==='ArrowDown') input.brake=1;
   if((e.key==='a'||e.key==='A')&&player.have>0){input.call=1;btn.call.active=0.18;audioInit()}
-  if(e.key===' '||e.key==='ArrowUp'){input.act=1;btn.act.active=0.18;audioInit()}
+  if((e.key===' '||e.key==='ArrowUp')&&!btn.act.disabled){input.act=1;btn.act.active=0.18;audioInit()}
   if((e.key==='Enter'||e.key==='r'||e.key==='R')&&mode!=='play'){audioInit();resetRun();}
   if((e.key===' '||e.key==='ArrowUp')&&mode!=='play'){audioInit();resetRun();}
   if(['ArrowDown','ArrowUp',' '].includes(e.key)) e.preventDefault();
@@ -844,7 +923,7 @@ function pointerDown(e){
   }
   if(k==='brake'){brakePointers.add(e.pointerId);input.brake=1;}
   else if(k==='call'&&player.have>0){input.call=1;btn.call.active=0.18;}
-  else if(k==='act'){input.act=1;btn.act.active=0.18;}
+  else if(k==='act'&&!btn.act.disabled){input.act=1;btn.act.active=0.18;}
   e.preventDefault();
 }
 
