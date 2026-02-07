@@ -29,7 +29,7 @@ This will:
 ### Access the game:
 - **Local browser**: http://localhost:8000
 - **Mobile device**: 
-  1. Find your computer's IP: `ifconfig | grep "inet "`
+  1. Find your computer's IP: `ifconfig | grep "inet "` OR `ipconfig getifaddr en0 || ipconfig getifaddr en1 || ifconfig | awk '/inet / && $2 != "127.0.0.1" {print $2; exit}'`
   2. Open http://YOUR_IP:8000 on your phone browser
 
 ### Stop the server:
