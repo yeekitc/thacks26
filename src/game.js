@@ -2,6 +2,7 @@
 const c=document.getElementById('c'),g=c.getContext('2d',{alpha:false});
 let W=0,H=0;
 const ZOOM=0.9;
+const PUSHER_RUN=0.5;
 const TAU=Math.PI*2;
 const btn={call:{x:0,y:0,r:0,active:0,label:'CALL PUSHER'},brake:{x:0,y:0,r:0,active:0,label:'BRAKE'},act:{x:0,y:0,r:0,active:0,label:'ACTION',disabled:true}};
 const brakePointers=new Set();
@@ -324,7 +325,7 @@ function tryCall(){
   if(mode!=='play') return;
   if(player.have>0&&player.boost<=0&&player.pusherIncoming<=0){
     player.have--;
-    player.pusherIncoming=1.0;
+    player.pusherIncoming=PUSHER_RUN;
     player.pusherStartX=camX-40;
     sfx('boost');burst(player.x-15,player.y+8,14,'#ffde94',150);
   }
@@ -593,7 +594,7 @@ function drawBuggy(){
   }
 
   if(player.pusherIncoming>0){
-    const t=1-player.pusherIncoming;
+    const t=1-player.pusherIncoming/PUSHER_RUN;
     const eased=1-Math.pow(1-t,2);
     const targetX=player.x-40;
     const px=player.pusherStartX+(targetX-player.pusherStartX)*eased;
