@@ -104,7 +104,7 @@ function resize(){
 function layoutButtons(){
   const pad=Math.max(18,Math.min(W,H)*0.03);
   const rScale=1-chromeLossRatio*0.26;
-  const r=Math.max(38,Math.min(W,H)*0.115*rScale);
+  const r=Math.max(38,Math.min(W,H)*0.115*rScale)*1.15;
   const leftPad=Math.max(pad*1.8,safeL+pad*0.5);
   const rightPad=Math.max(pad*1.8,safeR+pad*0.5);
   const chromeLift=Math.max(0,H*chromeLossRatio*0.18);
@@ -1290,17 +1290,17 @@ function drawPusherReserve(){
     const filled=i<player.have;
     const x=sx+i*(slotW+gap);
     const r=Math.max(5,slotW*0.28);
-    g.globalAlpha=(filled?0.78:0.32)*deEmphasis;
+    g.globalAlpha=(filled?0.88:0.45)*deEmphasis;
     g.fillStyle=filled?'rgba(174,234,255,0.95)':'rgba(255,255,255,0.20)';
     roundRect(x,sy,slotW,slotH,r);g.fill();
-    g.globalAlpha=(filled?0.85:0.38)*deEmphasis;
+    g.globalAlpha=(filled?0.92:0.50)*deEmphasis;
     g.strokeStyle=filled?'rgba(210,245,255,0.95)':'rgba(255,255,255,0.45)';
     g.lineWidth=2;
     roundRect(x,sy,slotW,slotH,r);g.stroke();
 
     const cx=x+slotW*0.5;
     const headY=sy+slotH*0.34;
-    g.globalAlpha=(filled?0.95:0.38)*deEmphasis;
+    g.globalAlpha=(filled?0.98:0.50)*deEmphasis;
     g.fillStyle=filled?'#083347':'#f2f2f2';
     g.beginPath();g.arc(cx,headY,slotW*0.16,0,TAU);g.fill();
     g.strokeStyle=g.fillStyle;
@@ -1314,7 +1314,7 @@ function drawPusherReserve(){
     g.stroke();
   }
 
-  g.globalAlpha=0.58*deEmphasis;
+  g.globalAlpha=0.70*deEmphasis;
   g.fillStyle='#fff';
   g.font='700 '+labelSize+'px system-ui,sans-serif';
   g.fillText('PUSHERS '+player.have+'/'+maxSlots,btn.call.x,labelY);
@@ -1325,13 +1325,14 @@ function drawPusherReserve(){
 function getPusherReserveMetrics(){
   const maxSlots=player.maxHave;
   if(maxSlots<=0) return null;
-  const slotW=Math.max(20,btn.call.r*0.34);
+  const scale=1.15;
+  const slotW=Math.max(20,btn.call.r*0.34)*scale;
   const slotH=Math.round(slotW*1.2);
   const gap=Math.max(8,slotW*0.2);
   const totalW=maxSlots*slotW+(maxSlots-1)*gap;
   const sx=btn.call.x-totalW*0.5;
   const sy=btn.call.y+btn.call.r+12;
-  const labelSize=Math.max(10,Math.round(btn.call.r*0.15));
+  const labelSize=Math.max(10,Math.round(btn.call.r*0.15))*scale;
   const labelY=sy+slotH+Math.max(13,btn.call.r*0.18);
   return {maxSlots,slotW,slotH,gap,totalW,sx,sy,labelSize,labelY};
 }
@@ -1380,7 +1381,7 @@ function drawButton(b,key){
   const tutTarget=tutorialFocusKey();
   const isTutTarget=(mode==='title'&&tutTarget&&key===tutTarget);
   const deEmphasis=(mode==='title'&&tutTarget&&key!==tutTarget)?0.5:1;
-  const baseAlpha=(disabled?0.3:active?0.9:0.62)*deEmphasis;
+  const baseAlpha=(disabled?0.55:active?0.98:0.85)*deEmphasis;
   if(isTutTarget){
     const glowR=b.r+16+Math.sin(tNow*3.6)*1.5;
     const glow=g.createRadialGradient(b.x,b.y,b.r*0.68,b.x,b.y,glowR);
@@ -1394,7 +1395,7 @@ function drawButton(b,key){
   g.globalAlpha=baseAlpha;
   g.fillStyle=disabled?'#666':key==='call'?'#2e91d8':'#6fbf4f';
   g.beginPath();g.arc(b.x,b.y,b.r,0,TAU);g.fill();
-  g.strokeStyle=disabled?'rgba(255,255,255,.4)':'rgba(255,255,255,.85)';g.lineWidth=3;g.stroke();
+  g.strokeStyle=disabled?'rgba(255,255,255,.65)':'rgba(255,255,255,.98)';g.lineWidth=3;g.stroke();
 
   if(isTutTarget){
     const pulse=(Math.sin(tNow*4.4)+1)*0.5;
@@ -1416,7 +1417,7 @@ function drawButton(b,key){
 
   // Keep labels/icons on buttons for readability while center cues animate separately.
   const textEmphasis=(mode==='title'&&tutTarget&&key!==tutTarget)?0.78:1;
-  g.globalAlpha=(disabled?0.62:0.98)*textEmphasis;
+  g.globalAlpha=(disabled?0.85:1.0)*textEmphasis;
   g.fillStyle=disabled?'#e1e1e1':'#fff';
   g.textAlign='center';
   if(b.icon){
