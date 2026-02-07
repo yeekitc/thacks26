@@ -3,6 +3,8 @@ const c=document.getElementById('c'),g=c.getContext('2d',{alpha:false});
 let W=0,H=0;
 const ZOOM=0.81;
 const CAM_FOLLOW_Y=0.50; // was 0.58; shows ~20% more terrain below the buggy
+let camFollowY=CAM_FOLLOW_Y;
+let chromeLossRatio=0;
 const ACCEL_SCALE=0.85;
 const DECEL_SCALE=1.20;
 const MAX_SPEED=460; // ~15% lower than previous 541 cap
@@ -85,6 +87,11 @@ function resize(){
   const dpr=Math.min(devicePixelRatio||1,2);
   const vv=window.visualViewport;
   const sw=vv?vv.width:innerWidth,sh=vv?vv.height:innerHeight;
+  const touchDevice=(navigator.maxTouchPoints||0)>0;
+  const screenShort=Math.max(1,Math.min(screen.width||sw,screen.height||sh));
+  const chromeLossPx=Math.max(0,screenShort-sh);
+  chromeLossRatio=(touchDevice&&sw>=sh)?clamp(chromeLossPx/screenShort,0,0.35):0;
+  camFollowY=clamp(CAM_FOLLOW_Y-chromeLossRatio*0.44,0.34,CAM_FOLLOW_Y);
   W=sw/ZOOM;H=sh/ZOOM;
   c.width=Math.floor(sw*dpr);c.height=Math.floor(sh*dpr);
   c.style.width=sw+'px';c.style.height=sh+'px';
@@ -99,10 +106,12 @@ function resize(){
 
 function layoutButtons(){
   const pad=Math.max(18,Math.min(W,H)*0.03);
-  const r=Math.max(42,Math.min(W,H)*0.115);
+  const rScale=1-chromeLossRatio*0.26;
+  const r=Math.max(38,Math.min(W,H)*0.115*rScale);
   const leftPad=Math.max(pad*1.8,safeL+pad*0.5);
   const rightPad=Math.max(pad*1.8,safeR+pad*0.5);
-  const bottomPad=Math.max(pad*2.2,safeB+pad*0.5);
+  const chromeLift=Math.max(0,H*chromeLossRatio*0.18);
+  const bottomPad=Math.max(pad*2.2,safeB+pad*0.5)+chromeLift;
   const buttonLift=Math.max(10,r*0.18);
   btn.act.x=leftPad+r;btn.act.y=H-bottomPad-r-buttonLift;btn.act.r=r;
   btn.call.x=W-rightPad-r;btn.call.y=H-bottomPad-r-buttonLift;btn.call.r=r;
@@ -602,7 +611,7 @@ function resetRun(){
   ensureWorld(player.x+2200);
   const gy=groundY(player.x)||320;
   player.y=gy-BUGGY.rideHeight;
-  camX=player.x-W*0.33;camY=player.y-H*CAM_FOLLOW_Y;
+  camX=player.x-W*0.33;camY=player.y-H*camFollowY;
   startX=player.x;
 }
 
@@ -871,7 +880,7 @@ function updatePlay(dt){
 
   score=Math.max(0,Math.floor((player.x-startX)/10));
   camX+=(player.x-W*0.30-camX)*Math.min(1,dt*4.5);
-  camY+=(player.y-H*CAM_FOLLOW_Y-camY)*Math.min(1,dt*4.2);
+  camY+=(player.y-H*camFollowY-camY)*Math.min(1,dt*4.2);
   rollT-=dt;
   if(rollT<=0&&player.on&&player.speed>24){
     const s=Math.min(1,player.speed/304);
@@ -1534,7 +1543,7 @@ function update(dt){
     ensureWorld(player.x+W+1200);
     const gy=groundY(player.x)||320;
     camX+=(player.x-W*0.33-camX)*Math.min(1,dt*3.2);
-    camY+=(gy-BUGGY.rideHeight-H*CAM_FOLLOW_Y-camY)*Math.min(1,dt*3);
+    camY+=(gy-BUGGY.rideHeight-H*camFollowY-camY)*Math.min(1,dt*3);
     for(let i=particles.length-1;i>=0;i--){
       const p=particles[i];
       p.life-=dt;
@@ -1620,6 +1629,6 @@ c.addEventListener('pointerleave',pointerUp);
 resize();
 ensureWorld(2200);
 player.y=(groundY(player.x)||320)-BUGGY.rideHeight;
-camX=player.x-W*0.33;camY=player.y-H*CAM_FOLLOW_Y;
+camX=player.x-W*0.33;camY=player.y-H*camFollowY;
 requestAnimationFrame(loop);
 })();
