@@ -68,6 +68,9 @@ rm -f "$JS_TMP"
 
 LC_ALL=C tar -C "$BUILD_DIR" -cf "$TAR_FILE" index.html
 
+echo ""
+echo "Compressing with available formats..."
+
 if [ "$HAS_BROTLI" -eq 1 ]; then
     brotli -f -q 11 "$TAR_FILE" -o "${BUILD_DIR}/game.tar.br"
 fi
@@ -79,16 +82,26 @@ if [ "$HAS_GZIP" -eq 1 ]; then
 fi
 rm -f "$TAR_FILE"
 
+echo ""
+echo "Compression results:"
+echo "-------------------"
+
 BEST_SIZE=999999999
 for CANDIDATE in "${BUILD_DIR}/game.tar.br" "${BUILD_DIR}/game.tar.zst" "${BUILD_DIR}/game.tar.gz"; do
     if [ -f "$CANDIDATE" ]; then
         CANDIDATE_SIZE=$(wc -c < "$CANDIDATE" | tr -d ' ')
+        FORMAT=$(basename "$CANDIDATE" | sed 's/game\.tar\.//')
+        printf "  %-8s %6d bytes\n" "$FORMAT" "$CANDIDATE_SIZE"
         if [ "$CANDIDATE_SIZE" -lt "$BEST_SIZE" ]; then
             BEST_SIZE="$CANDIDATE_SIZE"
             ARCHIVE_FILE="$CANDIDATE"
         fi
     fi
 done
+
+CHOSEN_FORMAT=$(basename "$ARCHIVE_FILE" | sed 's/game\.tar\.//')
+echo "-------------------"
+echo "Selected: $CHOSEN_FORMAT (smallest)"
 
 for CANDIDATE in "${BUILD_DIR}/game.tar.br" "${BUILD_DIR}/game.tar.zst" "${BUILD_DIR}/game.tar.gz"; do
     if [ -f "$CANDIDATE" ] && [ "$CANDIDATE" != "$ARCHIVE_FILE" ]; then
@@ -98,7 +111,7 @@ done
 
 SIZE=$(wc -c < "$ARCHIVE_FILE" | tr -d ' ')
 echo ""
-echo "Archive: $ARCHIVE_FILE"
+echo "Final archive: $(basename "$ARCHIVE_FILE")"
 echo "Size: $SIZE bytes (limit: $SIZE_LIMIT)"
 if [ "$SIZE" -gt "$SIZE_LIMIT" ]; then
     echo "WARNING: Over 15KB limit by $((SIZE - SIZE_LIMIT)) bytes!"
