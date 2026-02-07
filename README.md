@@ -1,7 +1,7 @@
 # FOR THE JUDGES:
 
-Link to the compressed file (15,311 Bytes): https://drive.google.com/file/d/1QB5p1t8cRlBuAA0dmfDRVPIGRrvbSTil/view?usp=sharing
-Link to hosted game: https://thacks26.vercel.app/
+- Link to the compressed file (15,311 Bytes): https://drive.google.com/file/d/1QB5p1t8cRlBuAA0dmfDRVPIGRrvbSTil/view?usp=sharing
+- Link to hosted game: https://thacks26.vercel.app/
 
 ---
 
