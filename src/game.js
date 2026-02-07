@@ -2,13 +2,18 @@
 const c=document.getElementById('c'),g=c.getContext('2d',{alpha:false});
 let W=0,H=0;
 const ZOOM=0.81;
+const CAM_FOLLOW_Y=0.50; // was 0.58; shows ~20% more terrain below the buggy
+const ACCEL_SCALE=0.85;
+const DECEL_SCALE=1.20;
+const MAX_SPEED=460; // ~15% lower than previous 541 cap
+const SLOPE_GRAVITY=286; // slightly softer downhill pull from terrain slope
 const PUSHER_RUN=0.5;
 const TAU=Math.PI*2;
 const GEN={
   pot:{start:920,min:780,max:1280,jitter:36,step:42,maxTries:18,clear:220,maxSlope:0.55,gapPad:90},
   npc:{start:340,min:430,max:860,jitter:48,step:36,maxTries:20,clear:190,maxSlope:0.42,gapPad:95},
   bridge:{
-    start:1550,chance:0.20,min:1700,max:2900,
+    start:1550,safeStart:2500,chance:0.20,min:1700,max:2900,
     approachLen:[130,220],approachSlope:[0.10,0.18],
     rampLen:[70,115],rampSlope:[0.22,0.32],
     lipLen:[20,34],lipSlope:[0.03,0.08],
@@ -16,7 +21,7 @@ const GEN={
     settleLen1:[110,180],settleSlope1:[0.06,0.14],
     settleLen2:[180,280],settleSlope2:[0.12,0.20]
   },
-  terrain:{lenMin:150,lenMax:275,min:-0.08,max:0.85,flatCut:0.14,flatLimit:2,maxRisePerSeg:22,maxRiseFromDeep:96}
+  terrain:{lenMin:150,lenMax:275,min:-0.08,max:0.78,flatCut:0.14,flatLimit:2,maxRisePerSeg:22,maxRiseFromDeep:96}
 };
 const btn={call:{x:0,y:0,r:0,active:0,label:'CALL PUSHER'},brake:{x:0,y:0,r:0,active:0,label:'BRAKE'},act:{x:0,y:0,r:0,active:0,label:'ACTION',disabled:true}};
 const brakePointers=new Set();
@@ -193,12 +198,12 @@ function chooseTerrainMode(x0){
   const distToGap=world.nextGap-x0;
   const r=Math.random();
   if(distToGap<430){
-    if(r<0.84) return {mode:'drop',target:rr(0.54,0.82),hold:2+((Math.random()*2)|0)};
-    return {mode:'flow',target:rr(0.30,0.52),hold:2+((Math.random()*2)|0)};
+    if(r<0.78) return {mode:'drop',target:rr(0.48,0.72),hold:2+((Math.random()*2)|0)};
+    return {mode:'flow',target:rr(0.26,0.46),hold:2+((Math.random()*2)|0)};
   }
-  if(r<0.48) return {mode:'drop',target:rr(0.48,0.76),hold:2+((Math.random()*3)|0)};
-  if(r<0.88) return {mode:'flow',target:rr(0.20,0.50),hold:2+((Math.random()*3)|0)};
-  return {mode:'recover',target:rr(-0.12,0.02),hold:2+((Math.random()*2)|0)};
+  if(r<0.42) return {mode:'drop',target:rr(0.42,0.66),hold:2+((Math.random()*3)|0)};
+  if(r<0.90) return {mode:'flow',target:rr(0.16,0.44),hold:2+((Math.random()*3)|0)};
+  return {mode:'recover',target:rr(-0.10,0.02),hold:2+((Math.random()*2)|0)};
 }
 
 function nextTerrainSlope(x0){
@@ -209,17 +214,17 @@ function nextTerrainSlope(x0){
   }
   t.modeLeft--;
   t.hold--;
-  const turn=t.mode==='drop'?0.17:t.mode==='flow'?0.13:0.10;
-  const jit=t.mode==='drop'?0.035:t.mode==='flow'?0.027:0.020;
+  const turn=t.mode==='drop'?0.15:t.mode==='flow'?0.11:0.09;
+  const jit=t.mode==='drop'?0.030:t.mode==='flow'?0.022:0.018;
   const delta=Math.max(-turn,Math.min(turn,t.target-t.slope));
   t.slope+=delta+(Math.random()*2-1)*jit;
   if(Math.abs(t.slope)<GEN.terrain.flatCut) t.flat++;
   else t.flat=0;
   if(t.flat>GEN.terrain.flatLimit){
-    t.mode='drop';t.target=rr(0.42,0.68);
+    t.mode='drop';t.target=rr(0.36,0.58);
     t.modeLeft=2;t.hold=2;t.flat=0;
   }
-  if(x0<900&&t.slope<0.34) t.slope=rr(0.34,0.54);
+  if(x0<900&&t.slope<0.30) t.slope=rr(0.30,0.46);
   t.slope=Math.max(GEN.terrain.min,Math.min(GEN.terrain.max,t.slope));
   return t.slope;
 }
@@ -270,7 +275,7 @@ function ensureWorld(toX){
   const bc=GEN.bridge;
   while(world.lastX<toX){
     const x0=world.lastX,y0=world.lastY;
-    if(x0>world.nextGap&&Math.random()<bc.chance){
+    if(x0>world.nextGap&&x0>bc.safeStart&&Math.random()<bc.chance){
       const approach=rr(bc.approachLen[0],bc.approachLen[1]);
       const approachSlope=rr(bc.approachSlope[0],bc.approachSlope[1]);
       const x1=x0+approach,y1=y0+approach*approachSlope;
@@ -335,7 +340,7 @@ function resetRun(){
   ensureWorld(player.x+2200);
   const gy=groundY(player.x)||320;
   player.y=gy-16;
-  camX=player.x-W*0.33;camY=player.y-H*0.58;
+  camX=player.x-W*0.33;camY=player.y-H*CAM_FOLLOW_Y;
   startX=player.x;
 }
 
@@ -359,6 +364,14 @@ function endRun(msg,crash){
   newBest=score>best?1:0;
   if(score>best) best=score;
   if(crash){burst(player.x,player.y,26,'#ff9157',260);sfx('crash')}else sfx('fail');
+}
+
+function failInput(){
+  const gy=groundY(player.x);
+  textDisplays.push({x:player.x,y:(gy==null?player.y+16:gy)-46,text:'Fail!',time:0.72,col:'#ff5757',stroke:'rgba(70,0,0,0.65)'});
+  player.speed*=0.7;
+  if(!player.on) player.vx=Math.max(10,player.vx*0.7);
+  sfx('hit');
 }
 
 function tryAction(){
@@ -388,12 +401,15 @@ function tryAction(){
     nearPot.dodge=1;nearPot.flash=0.22;player.swerve=0.28;
     sfx('swerve');burst(nearPot.x,groundY(nearPot.x)-8,8,'#aad0ef',90);
     btnFloats.push({text:'SWERVED!',time:0.9,max:0.9,col:'#ffe08f'});
+    return;
   }
+  failInput();
 }
 
 function tryCall(){
   if(mode!=='play') return;
-  if(player.have>0&&player.boost<=0&&player.pusherIncoming<=0){
+  if(player.have<=0){failInput();return;}
+  if(player.boost<=0&&player.pusherIncoming<=0){
     player.have--;
     player.pusherIncoming=PUSHER_RUN;
     player.pusherStartX=camX-40;
@@ -427,12 +443,13 @@ function updatePlay(dt){
 
   if(player.on){
     const sl=slopeAt(player.x);
-    let acc=sl*304-22;
-    if(input.brake) acc-=144;
-    if(player.boost>0) acc+=385;
-    if(player.potholeSlow>0) acc-=240;
+    const slopeAcc=sl*SLOPE_GRAVITY;
+    let acc=(slopeAcc>=0?slopeAcc*ACCEL_SCALE:slopeAcc*DECEL_SCALE)-22*DECEL_SCALE;
+    if(input.brake) acc-=144*DECEL_SCALE;
+    if(player.boost>0) acc+=385*ACCEL_SCALE;
+    if(player.potholeSlow>0) acc-=240*DECEL_SCALE;
     player.speed+=acc*dt;
-    player.speed=Math.max(0,Math.min(541,player.speed));
+    player.speed=Math.max(0,Math.min(MAX_SPEED,player.speed));
     player.x+=player.speed*dt;
     const gy=groundY(player.x);
     if(gy==null){
@@ -447,10 +464,10 @@ function updatePlay(dt){
     }
   }else{
     if(input.brake){
-      player.vx=Math.max(14,player.vx-112*dt);
+      player.vx=Math.max(14,player.vx-112*DECEL_SCALE*dt);
       player.ang-=1.8*dt;
     }else player.ang+=0.75*dt;
-    if(player.boost>0) player.vx+=96*dt;
+    if(player.boost>0) player.vx+=96*ACCEL_SCALE*dt;
     player.vy+=720*dt;
     player.x+=player.vx*dt;
     player.y+=player.vy*dt;
@@ -499,7 +516,7 @@ function updatePlay(dt){
 
   score=Math.max(0,Math.floor((player.x-startX)/10));
   camX+=(player.x-W*0.30-camX)*Math.min(1,dt*4.5);
-  camY+=(player.y-H*0.58-camY)*Math.min(1,dt*4.2);
+  camY+=(player.y-H*CAM_FOLLOW_Y-camY)*Math.min(1,dt*4.2);
   rollT-=dt;
   if(rollT<=0&&player.on&&player.speed>24){
     const s=Math.min(1,player.speed/304);
@@ -967,10 +984,10 @@ function render(){
     if(sx<-100||sx>W+100||sy<-100||sy>H+100) continue;
     const alpha=Math.min(1,t.time);
     g.globalAlpha=alpha;
-    g.fillStyle='#fff';
+    g.fillStyle=t.col||'#fff';
     g.font='800 '+(32+Math.sin(tNow*8)*2)+'px system-ui,sans-serif';
     g.textAlign='center';
-    g.strokeStyle='rgba(0,0,0,0.6)';
+    g.strokeStyle=t.stroke||'rgba(0,0,0,0.6)';
     g.lineWidth=6;
     g.strokeText(t.text,sx,sy);
     g.fillText(t.text,sx,sy);
@@ -1140,7 +1157,7 @@ function update(dt){
     ensureWorld(player.x+W+1200);
     const gy=groundY(player.x)||320;
     camX+=(player.x-W*0.33-camX)*Math.min(1,dt*3.2);
-    camY+=(gy-16-H*0.58-camY)*Math.min(1,dt*3);
+    camY+=(gy-16-H*CAM_FOLLOW_Y-camY)*Math.min(1,dt*3);
     for(let i=particles.length-1;i>=0;i--){
       const p=particles[i];
       p.life-=dt;
@@ -1153,8 +1170,8 @@ function update(dt){
 function keyDown(e){
   if(e.repeat&&(e.key==='a'||e.key==='A'||e.key===' '||e.key==='ArrowUp')) return;
   if(e.key==='s'||e.key==='S'||e.key==='ArrowDown') input.brake=1;
-  if((e.key==='a'||e.key==='A')&&player.have>0){input.call=1;btn.call.active=0.18;audioInit()}
-  if((e.key===' '||e.key==='ArrowUp')&&!btn.act.disabled){input.act=1;btn.act.active=0.18;audioInit()}
+  if(mode==='play'&&(e.key==='a'||e.key==='A')){input.call=1;btn.call.active=0.18;audioInit()}
+  if(mode==='play'&&(e.key===' '||e.key==='ArrowUp')){input.act=1;btn.act.active=0.18;audioInit()}
   if((e.key==='Enter'||e.key==='r'||e.key==='R')&&mode!=='play'){audioInit();resetRun();}
   if((e.key===' '||e.key==='ArrowUp')&&mode!=='play'){audioInit();resetRun();}
   if(['ArrowDown','ArrowUp',' '].includes(e.key)) e.preventDefault();
@@ -1194,8 +1211,8 @@ function pointerDown(e){
     return;
   }
   if(k==='brake'){brakePointers.add(e.pointerId);input.brake=1;}
-  else if(k==='call'&&player.have>0){input.call=1;btn.call.active=0.18;}
-  else if(k==='act'&&!btn.act.disabled){input.act=1;btn.act.active=0.18;}
+  else if(k==='call'){input.call=1;btn.call.active=0.18;}
+  else if(k==='act'){input.act=1;btn.act.active=0.18;}
   e.preventDefault();
 }
 
@@ -1220,6 +1237,6 @@ c.addEventListener('pointerleave',pointerUp);
 resize();
 ensureWorld(2200);
 player.y=(groundY(player.x)||320)-16;
-camX=player.x-W*0.33;camY=player.y-H*0.58;
+camX=player.x-W*0.33;camY=player.y-H*CAM_FOLLOW_Y;
 requestAnimationFrame(loop);
 })();
