@@ -213,6 +213,8 @@ function ensureWorld(toX){
       const len=80+Math.random()*140;
       const r=Math.random();
       let s=r<0.15?0.02+Math.random()*0.05:r<0.55?0.15+Math.random()*0.35:r<0.85?0.35+Math.random()*0.48:-0.18+Math.random()*0.12;
+      const inStartZone=x0<700;
+      if(inStartZone&&s<0.05) s=0.15+Math.random()*0.25;
       if(world.lastY<150&&s<0.05) s=0.25+Math.random()*0.3;
       if(world.lastY>560&&s>0.05) s=-0.15+Math.random()*0.12;
       let y=y0+len*s;
@@ -372,7 +374,7 @@ function updatePlay(dt){
       if(p.dodge){
         if(gy!=null) textDisplays.push({x:p.x,y:gy-40,text:'swerved',time:1.0});
       }else{
-        player.speed=Math.max(0,player.speed*0.65-12);
+        player.speed=Math.max(0,player.speed*0.85-12);
         burst(p.x,groundY(p.x)-6,12,'#6e5a3f',140);
         sfx('hit');
         if(gy!=null) textDisplays.push({x:p.x,y:gy-40,text:'oof',time:1.0});
