@@ -1,3 +1,10 @@
+# FOR THE JUDGES:
+
+Link to the compressed file (15,311 Bytes): https://drive.google.com/file/d/1QB5p1t8cRlBuAA0dmfDRVPIGRrvbSTil/view?usp=sharing
+Link to hosted game: https://thacks26.vercel.app/
+
+---
+
 # Buggy On - TartanHacks 2026
 By Anthony Bustamante, Yee Kit Chan, and Evelynn Chen
 
