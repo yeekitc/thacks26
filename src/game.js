@@ -1103,6 +1103,105 @@ function drawPotholeSpriteScreen(sx,sy,opt){
   g.restore();
 }
 
+function drawBridgeGapSpriteScreen(sx,sy,opt){
+  const o=opt||{};
+  const gapW=o.gapW||80;
+  const gapH=o.gapH||60;
+  const hasRiver=o.river!==false;
+  const swing=Math.sin(tNow*1.8)*0.12;
+  g.save();
+  g.translate(sx,sy);
+  
+  // Ground/terrain base
+  g.fillStyle='rgba(84,60,39,.9)';
+  g.fillRect(-gapW*0.6,-gapH*0.3,gapW*1.2,8);
+  
+  // River filling the gap (if applicable)
+  if(hasRiver){
+    const ry=-gapH*0.2;
+    const rg=g.createLinearGradient(0,ry,0,ry+gapH*0.8);
+    rg.addColorStop(0,'#3a6a8a');
+    rg.addColorStop(0.4,'#2a5070');
+    rg.addColorStop(1,'#1a3048');
+    g.fillStyle=rg;
+    g.fillRect(-gapW*0.5,ry,gapW,gapH*0.8);
+    // Shimmer lines
+    g.strokeStyle='rgba(160,210,240,.2)';
+    g.lineWidth=1;
+    for(let j=0;j<3;j++){
+      const sy=ry+12+j*14;
+      const sx=-gapW*0.5+((tNow*25+j*gapW*0.3)%gapW);
+      g.beginPath();
+      g.moveTo(sx,sy);
+      g.lineTo(sx+12,sy-1);
+      g.stroke();
+    }
+  }else{
+    // Dark gap void
+    const voidGrad=g.createLinearGradient(0,-gapH*0.2,0,-gapH*0.2+gapH*0.8);
+    voidGrad.addColorStop(0,'rgba(20,15,10,.6)');
+    voidGrad.addColorStop(1,'rgba(10,8,5,.8)');
+    g.fillStyle=voidGrad;
+    g.fillRect(-gapW*0.5,-gapH*0.2,gapW,gapH*0.8);
+  }
+  
+  // Left cliff face
+  g.fillStyle='#3a2412';
+  g.beginPath();
+  g.moveTo(-gapW*0.5,-gapH*0.3);
+  g.lineTo(-gapW*0.5+4,-gapH*0.25);
+  g.lineTo(-gapW*0.5+3,-gapH*0.25+gapH*0.5);
+  g.lineTo(-gapW*0.5-1,-gapH*0.25+gapH*0.5);
+  g.closePath();
+  g.fill();
+  
+  // Right cliff face
+  g.beginPath();
+  g.moveTo(gapW*0.5,-gapH*0.3);
+  g.lineTo(gapW*0.5-4,-gapH*0.25);
+  g.lineTo(gapW*0.5-3,-gapH*0.25+gapH*0.5);
+  g.lineTo(gapW*0.5+1,-gapH*0.25+gapH*0.5);
+  g.closePath();
+  g.fill();
+  
+  // Snapped bridge — left side (hangs from left edge)
+  g.save();
+  g.translate(-gapW*0.5,-gapH*0.25);
+  g.rotate(0.3+swing);
+  const planks=3;
+  for(let j=0;j<planks;j++){
+    const py=j*8+4;
+    g.strokeStyle='#6a5030';
+    g.lineWidth=1.2;
+    g.beginPath();
+    g.moveTo(-1,py);
+    g.lineTo(0,py+8);
+    g.stroke(); // rope
+    g.fillStyle='#7a6040';
+    g.fillRect(-3,py+1,6,2); // plank
+  }
+  g.restore();
+  
+  // Snapped bridge — right side (hangs from right edge)
+  g.save();
+  g.translate(gapW*0.5,-gapH*0.25);
+  g.rotate(-0.3-swing*0.8);
+  for(let j=0;j<planks;j++){
+    const py=j*8+4;
+    g.strokeStyle='#6a5030';
+    g.lineWidth=1.2;
+    g.beginPath();
+    g.moveTo(1,py);
+    g.lineTo(0,py+8);
+    g.stroke();
+    g.fillStyle='#7a6040';
+    g.fillRect(-3,py+1,6,2);
+  }
+  g.restore();
+  
+  g.restore();
+}
+
 function drawActionTutorialPanel(){
   const bw=Math.min(W*0.9,560);
   const bh=Math.min(H*0.24,150);
@@ -1706,7 +1805,6 @@ function render(){
       tutBox('Press ACTION near these to collect pushers and swerve potholes.',tutorialFocusTarget());
       drawActionTutorialPanel();
     }else{
-      const lines=['All 446 Pittsburgh bridges are down,','so you\'ll have to jump the gaps!','Run out of speed or crash = run over.'];
       const bw=Math.min(W*0.9,560),bh=188;
       const bx=W*0.5-bw*0.5,by=Math.max(40,H*0.2);
       const card=g.createLinearGradient(bx,by,bx,by+bh);
@@ -1724,14 +1822,19 @@ function render(){
       g.font='800 12px system-ui,sans-serif';
       g.fillText('BRIDGE ALERT',bx+81,by+30);
 
+      g.textAlign='center';
       g.fillStyle='#f0f5fa';
       g.font='700 19px system-ui,sans-serif';
-      g.fillText(lines[0],W*0.5,by+67);
-      g.font='600 17px system-ui,sans-serif';
+      g.fillText('All 446 Pittsburgh bridges collapsed,',W*0.5,by+67);
+      g.fillText('so you\'ll have to jump the gaps!',W*0.5,by+90);
+      
       g.fillStyle='rgba(233,241,249,.9)';
-      g.fillText(lines[1],W*0.5,by+94);
-      g.fillStyle='rgba(241,198,192,.9)';
-      g.fillText(lines[2],W*0.5,by+122);
+      g.font='600 15px system-ui,sans-serif';
+      g.fillText('We recommend saving pushers for these moments.',W*0.5,by+114);
+      
+      g.fillStyle='rgba(241,198,192,.95)';
+      g.font='600 17px system-ui,sans-serif';
+      g.fillText('Run out of speed or crash and your done.',W*0.5,by+142);
 
       const sbw=Math.min(280,bw-72),sbh=48;
       const sbx=W*0.5-sbw*0.5,sby=by+bh+24;
@@ -1744,6 +1847,7 @@ function render(){
       g.fillStyle='#fff4f4';
       g.font='800 22px system-ui,sans-serif';
       g.fillText('TAP TO START',W*0.5,sby+sbh*0.65);
+      g.textAlign='left';
     }
     if(tutorialStep>=1&&tutorialStep<5){
       const s=getSkipRect();
