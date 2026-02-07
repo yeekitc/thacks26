@@ -1402,15 +1402,32 @@ function drawHud(){
   const chromeLift=Math.max(0,H*chromeLossRatio*0.18);
   const speedBottomPad=Math.max(speedPad*0.8,safeB+speedPad*0.3)+chromeLift*0.5;
   const by=H-speedBottomPad-bh;
-  const v=Math.min(1,player.speed/420);
+  const v=Math.min(1,player.speed/MAX_SPEED);
+  const isOverSpeed=player.speed>MAX_SPEED;
   const br=bh*0.5;
   g.globalAlpha=0.35;g.fillStyle='#fff';g.font='600 '+Math.max(10,Math.round(11*s))+'px system-ui,sans-serif';
   g.textAlign='center';g.fillText('SPEED',W*0.5,by-4);g.textAlign='left';
   g.globalAlpha=0.45;g.fillStyle='#000';
   roundRect(bx,by,bw,bh,br);g.fill();
   g.globalAlpha=0.8;
-  g.fillStyle=v>.67?'#67e18f':v>.34?'#ffd36a':'#ff8c5a';
-  if(v>0){roundRect(bx+1,by+1,(bw-2)*v,bh-2,br-1);g.fill();}
+  const baseColor=v>.67?'#67e18f':v>.34?'#ffd36a':'#ff8c5a';
+  if(v>0){
+    const fillW=(bw-2)*v;
+    g.fillStyle=baseColor;
+    roundRect(bx+1,by+1,fillW,bh-2,br-1);g.fill();
+    if(isOverSpeed){
+      const tipX=bx+1+fillW;
+      const tipY=by+bh*0.5;
+      g.globalAlpha=0.7;
+      for(let i=0;i<5;i++){
+        const flameA=(tNow*8+i*1.3)%TAU;
+        const flameR=5+Math.sin(tNow*6+i)*3.5;
+        const flameY=tipY-4+Math.sin(tNow*5+i)*3;
+        g.fillStyle=i===0?'#ffaa44':i===1?'#ff8c3a':i===2?'#ff6b1a':i===3?'#ffaa44':'#ff8c3a';
+        g.beginPath();g.arc(tipX,flameY,flameR*1.1,0,TAU);g.fill();
+      }
+    }
+  }
   g.globalAlpha=1;
   // Wifi toggle icon (top-left)
   if(API){
