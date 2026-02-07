@@ -50,16 +50,16 @@ rm -f "$INDEX_OUT" "$JS_TMP" "$TAR_FILE" \
     "${BUILD_DIR}/style.css" "${BUILD_DIR}/game.js" \
     "${BUILD_DIR}/game.tar.br" "${BUILD_DIR}/game.tar.zst" "${BUILD_DIR}/game.tar.gz"
 
-if [ "$HAS_BUN" -eq 1 ]; then
+if command -v npx >/dev/null 2>&1; then
+    npx --yes terser "$JS_SRC" --compress passes=5,drop_console=true,unsafe_math=true,unsafe=true,pure_getters=true,keep_fargs=false,unsafe_comps=true,unsafe_Function=true,unsafe_methods=true,unsafe_proto=true,unsafe_regexp=true,unsafe_undefined=true --mangle toplevel=true --output "$JS_TMP"
+elif [ "$HAS_BUN" -eq 1 ]; then
     bun build "$JS_SRC" --minify --target=browser --outfile "$JS_TMP" >/dev/null
 else
     cp "$JS_SRC" "$JS_TMP"
 fi
 
 {
-    printf '<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><meta name=apple-mobile-web-app-capable content=yes><meta name=apple-mobile-web-app-status-bar-style content=black-translucent><meta name=mobile-web-app-capable content=yes><title>Buggy Downhill</title><style>'
-    cat "$CSS_SRC"
-    printf '</style><canvas id=c></canvas><script>'
+    printf '<body style=margin:0;overflow:hidden;background:#000><canvas id=c></canvas><script>'
     cat "$JS_TMP"
     printf '</script>'
 } > "$INDEX_OUT"

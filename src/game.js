@@ -45,7 +45,7 @@ const GEN={
   },
   terrain:{lenMin:150,lenMax:275,min:-0.08,max:0.78,flatCut:0.14,flatLimit:2,maxRisePerSeg:22,maxRiseFromDeep:96}
 };
-const btn={call:{x:0,y:0,r:0,active:0,label:'CALL PUSHER'},act:{x:0,y:0,r:0,active:0,label:'ACTION',disabled:true}};
+const btn={call:{x:0,y:0,r:0,active:0,label:'CALL'},act:{x:0,y:0,r:0,active:0,label:'ACTION',disabled:true}};
 let actPulse=0; // expanding ring timer when action becomes available
 const centerCues=[];
 let ac=null,master=null;
@@ -1932,7 +1932,7 @@ function drawButton(b,key){
     g.fillText(String(b.label||'').toUpperCase(),b.x,b.y+Math.max(15,b.r*0.34));
   }else{
     const label=String(b.label||'').toUpperCase();
-    if(key==='call'&&label==='CALL PUSHER'){
+    if(key==='call'&&label==='CALL'){
       g.font='italic 800 '+Math.max(17,b.r*0.312)+'px system-ui,sans-serif';
       g.fillText('CALL',b.x,b.y-Math.max(2,b.r*0.1));
       g.font='italic 800 '+Math.max(16,b.r*0.299)+'px system-ui,sans-serif';
@@ -2195,17 +2195,17 @@ function render(){
       g.fillText('BUGGY ON',W*0.5,H*0.38);
       g.font='600 '+Math.max(18,W*0.03)+'px system-ui,sans-serif';
       g.fillStyle='rgba(255,255,255,.7)';
-      g.fillText('CMU Tradition on Flagstaff Hill',W*0.5,H*0.46);
+      g.fillText('CMU Flagstaff Hill',W*0.5,H*0.46);
       g.fillStyle='#ffe08f';g.font='800 22px system-ui,sans-serif';
       g.fillText('TAP TO BEGIN',W*0.5,H*0.56+Math.sin(tNow*5)*3);
     }else if(tutorialStep===1){
-      tutBox('You can hold up to 3 pushers at once',tutorialFocusTarget());
+      tutBox('Hold up to 3 pushers',tutorialFocusTarget());
     }else if(tutorialStep===2){
-      tutBox('Tap CALL PUSHER to activate a boost',tutorialFocusTarget());
+      tutBox('Tap CALL for boost',tutorialFocusTarget());
     }else if(tutorialStep===3){
       tutBox('Dodge potholes or pick up pushers nearby',tutorialFocusTarget());
     }else if(tutorialStep===4){
-      tutBox('Press ACTION near these to collect pushers and swerve potholes.',tutorialFocusTarget());
+      tutBox('ACTION grabs pushers, dodges holes',tutorialFocusTarget());
       drawActionTutorialPanel();
     }else{
       const bw=Math.min(W*0.9,560),bh=188;
@@ -2233,11 +2233,11 @@ function render(){
       
       g.fillStyle='rgba(233,241,249,.9)';
       g.font='600 15px system-ui,sans-serif';
-      g.fillText('We recommend saving pushers for these moments.',W*0.5,by+114);
+      g.fillText('Save pushers for gaps',W*0.5,by+114);
       
       g.fillStyle='rgba(241,198,192,.95)';
       g.font='600 17px system-ui,sans-serif';
-      g.fillText('Run out of speed or crash and your done.',W*0.5,by+142);
+      g.fillText('Out of speed or crash = done',W*0.5,by+142);
 
       const sbw=Math.min(280,bw-72),sbh=48;
       const sbx=W*0.5-sbw*0.5,sby=by+bh+24;
