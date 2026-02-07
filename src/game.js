@@ -409,20 +409,31 @@ function nextTerrainSlope(x0){
 function spawnEntities(fromX,toX){
   if(toX<=fromX) return;
   const pc=GEN.pot,nc=GEN.npc;
+  const distance=player.x-startX;
+  const steps=Math.floor(distance/500);
+  const reductionPerStep=0.06;
+  const maxReduction=0.40;
+  const reduction=Math.min(maxReduction,steps*reductionPerStep);
+  const spacingMultiplier=1-reduction;
+  const adjustedMin=pc.min*spacingMultiplier;
+  const adjustedMax=pc.max*spacingMultiplier;
+  const adjustedClear=pc.clear*spacingMultiplier;
+  const adjustedClearPot=adjustedClear*0.72;
+  const adjustedStep=pc.step*spacingMultiplier;
   let attempts=0;
   while(world.nextPot<toX){
     const x=world.nextPot+(Math.random()*2-1)*pc.jitter;
-    const tooCloseNpc=world.npcs.some(n=>Math.abs(n.x-x)<pc.clear);
-    const tooClosePot=world.pots.some(p=>Math.abs(p.x-x)<pc.clear*0.72);
+    const tooCloseNpc=world.npcs.some(n=>Math.abs(n.x-x)<adjustedClear);
+    const tooClosePot=world.pots.some(p=>Math.abs(p.x-x)<adjustedClearPot);
     if(x>=fromX&&!nearGap(x,pc.gapPad)&&Math.abs(slopeAt(x))<pc.maxSlope&&!tooCloseNpc&&!tooClosePot) {
       world.pots.push({x,r:20,done:0,dodge:0,flash:0});
-      world.nextPot+=rr(pc.min,pc.max);
+      world.nextPot+=rr(adjustedMin,adjustedMax);
       attempts=0;
     } else {
-      world.nextPot+=pc.step;
+      world.nextPot+=adjustedStep;
       attempts++;
       if(attempts>pc.maxTries) {
-        world.nextPot+=rr(pc.min,pc.max)*0.5;
+        world.nextPot+=rr(adjustedMin,adjustedMax)*0.5;
         attempts=0;
       }
     }
