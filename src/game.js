@@ -142,19 +142,43 @@ function addPoint(x,y){
 }
 
 function spawnEntities(fromX,toX){
+  if(toX<=fromX) return;
+  let attempts=0;
   while(world.nextPot<toX){
     const x=world.nextPot+(Math.random()*50-25);
-    if(!gapAt(x)&&Math.abs(slopeAt(x))<0.72) world.pots.push({x,r:14,done:0,dodge:0,flash:0});
-    world.nextPot+=180+Math.random()*220;
+    if(x>=fromX&&!gapAt(x)&&Math.abs(slopeAt(x))<0.72) {
+      world.pots.push({x,r:14,done:0,dodge:0,flash:0});
+      world.nextPot+=180+Math.random()*220;
+      attempts=0;
+    } else {
+      world.nextPot+=30;
+      attempts++;
+      if(attempts>20) {
+        world.nextPot+=180+Math.random()*220;
+        attempts=0;
+      }
+    }
   }
+  attempts=0;
   while(world.nextNpc<toX){
     const x=world.nextNpc+(Math.random()*60-30);
-    if(!gapAt(x)&&Math.abs(slopeAt(x))<0.52) world.npcs.push({x,got:0,wave:Math.random()*TAU});
-    world.nextNpc+=250+Math.random()*350;
+    if(x>=fromX&&!gapAt(x)&&Math.abs(slopeAt(x))<0.52) {
+      world.npcs.push({x,got:0,wave:Math.random()*TAU});
+      world.nextNpc+=250+Math.random()*350;
+      attempts=0;
+    } else {
+      world.nextNpc+=30;
+      attempts++;
+      if(attempts>20) {
+        world.nextNpc+=250+Math.random()*350;
+        attempts=0;
+      }
+    }
   }
 }
 
 function ensureWorld(toX){
+  const startX=world.lastX;
   while(world.lastX<toX){
     const x0=world.lastX,y0=world.lastY;
     if(x0>world.nextGap&&Math.random()<0.45){
@@ -209,15 +233,15 @@ function ensureWorld(toX){
       y=Math.max(120,Math.min(620,y));
       addPoint(x0+len,y);
     }
-    spawnEntities(x0,world.lastX);
   }
+  spawnEntities(startX,toX);
 }
 
 function trimWorld(){
   const cut=camX-260;
   while(world.pts.length>4&&world.pts[1].x<cut) world.pts.shift();
   world.gaps=world.gaps.filter(v=>v.b>cut);
-  world.pots=world.pots.filter(v=>v.x>cut-80&&v.x<player.x+W*1.7);
+  world.pots=world.pots.filter(v=>v.x>cut-80);
   world.npcs=world.npcs.filter(v=>!v.got&&v.x>cut-100||v.got&&player.x-v.x<400);
 }
 
