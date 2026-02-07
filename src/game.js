@@ -1341,7 +1341,23 @@ function drawBuggy(){
   g.fillStyle='#C41230';
   g.fillRect(-28,-4,56,8);
   g.fillStyle='#000000';
-  g.beginPath();g.arc(-20,6,5,0,TAU);g.arc(20,6,5,0,TAU);g.fill();
+  const wheelR=5;
+  const spinSpeed=player.speed*0.02;
+  for(const wx of [-20,20]){
+    g.save();
+    g.translate(wx,6);
+    g.beginPath();g.arc(0,0,wheelR,0,TAU);g.fill();
+    g.strokeStyle='rgba(255,255,255,0.3)';
+    g.lineWidth=1;
+    for(let i=0;i<4;i++){
+      const a=(tNow*spinSpeed+i*Math.PI/2)%TAU;
+      g.beginPath();
+      g.moveTo(Math.cos(a)*wheelR*0.3,Math.sin(a)*wheelR*0.3);
+      g.lineTo(Math.cos(a)*wheelR*0.9,Math.sin(a)*wheelR*0.9);
+      g.stroke();
+    }
+    g.restore();
+  }
   g.fillStyle='#C41230';
   g.fillRect(-18,-6,36,6);
   g.strokeStyle='#C41230';
