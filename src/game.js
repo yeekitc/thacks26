@@ -22,7 +22,7 @@ const world={
 const player={
   x:80,y:0,vx:0,vy:0,speed:85,
   on:1,ang:0,airY:0,stall:0,
-  have:0,boost:0,swerve:0,maxHave:5
+  have:0,boost:0,swerve:0,maxHave:5,potholeDip:0
 };
 
 const particles=[];
@@ -243,7 +243,7 @@ function resetRun(){
   world.lastX=0;world.lastY=320;
   world.nextPot=320;world.nextNpc=240;world.nextGap=760;
   player.x=80;player.speed=85;player.vx=0;player.vy=0;player.on=1;player.ang=0;
-  player.have=0;player.boost=0;player.swerve=0;player.airY=0;player.stall=0;
+  player.have=0;player.boost=0;player.swerve=0;player.airY=0;player.stall=0;player.potholeDip=0;
   ensureWorld(player.x+2200);
   const gy=groundY(player.x)||320;
   player.y=gy-16;
@@ -321,6 +321,7 @@ function updatePlay(dt){
   }
 
   player.swerve=Math.max(0,player.swerve-dt);
+  player.potholeDip=Math.max(0,player.potholeDip-dt*3);
 
   if(player.on){
     const sl=slopeAt(player.x);
@@ -378,6 +379,7 @@ function updatePlay(dt){
         if(gy!=null) textDisplays.push({x:p.x,y:gy-40,text:'swerved',time:1.0});
       }else{
         player.speed=Math.max(0,player.speed*0.85-12);
+        player.potholeDip=0.35;
         burst(p.x,groundY(p.x)-6,12,'#6e5a3f',140);
         sfx('hit');
         if(gy!=null) textDisplays.push({x:p.x,y:gy-40,text:'oof',time:1.0});
@@ -547,7 +549,12 @@ function drawBuggy(){
 
   g.save();
   g.translate(sx,sy);
-  g.rotate(player.ang);
+  let nodAngle=0;
+  if(player.potholeDip>0){
+    const dipT=player.potholeDip/0.35;
+    nodAngle=Math.sin(dipT*Math.PI)*0.18;
+  }
+  g.rotate(player.ang+nodAngle);
 
   g.fillStyle='#302720';
   g.beginPath();g.arc(-14,8,7,0,TAU);g.arc(14,8,7,0,TAU);g.fill();
@@ -597,12 +604,13 @@ function drawHud(){
 
 function drawButton(b,key){
   const active=(key==='brake'?input.brake:b.active>0);
-  g.globalAlpha=active?0.9:0.62;
-  g.fillStyle=key==='brake'?'#f06a4f':key==='call'?'#2e91d8':'#6fbf4f';
+  const disabled=key==='call'&&player.have===0;
+  g.globalAlpha=disabled?0.3:active?0.9:0.62;
+  g.fillStyle=disabled?'#666':key==='brake'?'#f06a4f':key==='call'?'#2e91d8':'#6fbf4f';
   g.beginPath();g.arc(b.x,b.y,b.r,0,TAU);g.fill();
-  g.strokeStyle='rgba(255,255,255,.85)';g.lineWidth=3;g.stroke();
+  g.strokeStyle=disabled?'rgba(255,255,255,.4)':'rgba(255,255,255,.85)';g.lineWidth=3;g.stroke();
   g.globalAlpha=1;
-  g.fillStyle='#fff';
+  g.fillStyle=disabled?'#999':'#fff';
   g.textAlign='center';
   g.font='700 '+Math.max(11,b.r*0.22)+'px system-ui,sans-serif';
   g.fillText(b.label,b.x,b.y+4);
@@ -719,7 +727,7 @@ function update(dt){
 function keyDown(e){
   if(e.repeat&&(e.key==='a'||e.key==='A'||e.key===' '||e.key==='ArrowUp')) return;
   if(e.key==='s'||e.key==='S'||e.key==='ArrowDown') input.brake=1;
-  if(e.key==='a'||e.key==='A'){input.call=1;btn.call.active=0.18;audioInit()}
+  if((e.key==='a'||e.key==='A')&&player.have>0){input.call=1;btn.call.active=0.18;audioInit()}
   if(e.key===' '||e.key==='ArrowUp'){input.act=1;btn.act.active=0.18;audioInit()}
   if((e.key==='Enter'||e.key==='r'||e.key==='R')&&mode!=='play'){audioInit();resetRun();}
   if((e.key===' '||e.key==='ArrowUp')&&mode!=='play'){audioInit();resetRun();}
@@ -747,7 +755,7 @@ function pointerDown(e){
     return;
   }
   if(k==='brake'){brakePointers.add(e.pointerId);input.brake=1;}
-  else if(k==='call'){input.call=1;btn.call.active=0.18;}
+  else if(k==='call'&&player.have>0){input.call=1;btn.call.active=0.18;}
   else if(k==='act'){input.act=1;btn.act.active=0.18;}
   e.preventDefault();
 }
