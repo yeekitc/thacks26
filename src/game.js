@@ -6,7 +6,7 @@ const CAM_FOLLOW_Y=0.50; // was 0.58; shows ~20% more terrain below the buggy
 const ACCEL_SCALE=0.85;
 const DECEL_SCALE=1.20;
 const MAX_SPEED=460; // ~15% lower than previous 541 cap
-const BOOST_MAX_MULT=1.30;
+const BOOST_MAX_MULT=1.50;
 const BOOST_RECOVER_TIME=0.52;
 const BOOST_RECOVER_DECEL=980;
 const SLOPE_GRAVITY=286; // slightly softer downhill pull from terrain slope
@@ -60,7 +60,7 @@ const world={
 const player={
   x:80,y:0,vx:0,vy:0,speed:68,
   on:1,ang:0,airY:0,stall:0,
-  have:0,boost:0,swerve:0,maxHave:5,potholeDip:0,potholeSlow:0,
+  have:0,boost:0,swerve:0,maxHave:3,potholeDip:0,potholeSlow:0,
   pusherIncoming:0,pusherStartX:0,boostCarry:0
 };
 
@@ -92,9 +92,10 @@ function layoutButtons(){
   const leftPad=Math.max(pad*1.8,safeL+pad*0.5);
   const rightPad=Math.max(pad*1.8,safeR+pad*0.5);
   const bottomPad=Math.max(pad*2.2,safeB+pad*0.5);
-  btn.act.x=leftPad+r;btn.act.y=H-bottomPad-r;btn.act.r=r;
-  btn.call.x=W-rightPad-r;btn.call.y=H-bottomPad-r;btn.call.r=r;
-  btn.brake.x=W-rightPad-r;btn.brake.y=H-bottomPad-r-r*2.2;btn.brake.r=r*0.85;
+  const buttonLift=Math.max(10,r*0.18);
+  btn.act.x=leftPad+r;btn.act.y=H-bottomPad-r-buttonLift;btn.act.r=r;
+  btn.call.x=W-rightPad-r;btn.call.y=H-bottomPad-r-buttonLift;btn.call.r=r;
+  btn.brake.x=W-rightPad-r;btn.brake.y=H-bottomPad-r-r*2.2-buttonLift;btn.brake.r=r*0.85;
 }
 
 function audioInit(){
@@ -1020,6 +1021,53 @@ function drawHud(){
   g.globalAlpha=1;
 }
 
+function drawPusherReserve(){
+  const maxSlots=player.maxHave;
+  if(maxSlots<=0) return;
+  const slotW=Math.max(20,btn.call.r*0.34);
+  const slotH=Math.round(slotW*1.2);
+  const gap=Math.max(8,slotW*0.2);
+  const totalW=maxSlots*slotW+(maxSlots-1)*gap;
+  const sx=btn.call.x-totalW*0.5;
+  const sy=btn.call.y+btn.call.r+12;
+
+  g.textAlign='center';
+  for(let i=0;i<maxSlots;i++){
+    const filled=i<player.have;
+    const x=sx+i*(slotW+gap);
+    const r=Math.max(5,slotW*0.28);
+    g.globalAlpha=filled?0.78:0.32;
+    g.fillStyle=filled?'rgba(174,234,255,0.95)':'rgba(255,255,255,0.20)';
+    roundRect(x,sy,slotW,slotH,r);g.fill();
+    g.globalAlpha=filled?0.85:0.38;
+    g.strokeStyle=filled?'rgba(210,245,255,0.95)':'rgba(255,255,255,0.45)';
+    g.lineWidth=2;
+    roundRect(x,sy,slotW,slotH,r);g.stroke();
+
+    const cx=x+slotW*0.5;
+    const headY=sy+slotH*0.34;
+    g.globalAlpha=filled?0.95:0.38;
+    g.fillStyle=filled?'#083347':'#f2f2f2';
+    g.beginPath();g.arc(cx,headY,slotW*0.16,0,TAU);g.fill();
+    g.strokeStyle=g.fillStyle;
+    g.lineWidth=Math.max(2,slotW*0.11);
+    g.lineCap='round';
+    g.beginPath();
+    g.moveTo(cx,headY+slotW*0.2);
+    g.lineTo(cx,sy+slotH*0.82);
+    g.moveTo(cx-slotW*0.16,sy+slotH*0.56);
+    g.lineTo(cx+slotW*0.16,sy+slotH*0.56);
+    g.stroke();
+  }
+
+  g.globalAlpha=0.58;
+  g.fillStyle='#fff';
+  g.font='700 '+Math.max(10,Math.round(btn.call.r*0.15))+'px system-ui,sans-serif';
+  g.fillText('PUSHERS '+player.have+'/'+maxSlots,btn.call.x,sy+slotH+Math.max(13,btn.call.r*0.18));
+  g.globalAlpha=1;
+  g.textAlign='left';
+}
+
 function drawButton(b,key){
   const active=(key==='brake'?input.brake:b.active>0);
   // allow per-button disabled flag (b.disabled) but keep existing call-specific rule
@@ -1232,6 +1280,7 @@ function render(){
   drawButton(btn.call,'call');
   drawButton(btn.brake,'brake');
   drawButton(btn.act,'act');
+  drawPusherReserve();
   drawCenterCues();
 
   if(mode==='title'){
@@ -1246,8 +1295,8 @@ function render(){
       g.fillStyle='#ffe08f';g.font='800 22px system-ui,sans-serif';
       g.fillText('TAP TO BEGIN',W*0.5,H*0.56+Math.sin(tNow*5)*3);
     }else if(tutorialStep===1){
-      tutBox('You can hold up to 5 pushers at once');
-      player.have=5;drawBuggy();player.have=0;
+      tutBox('You can hold up to 3 pushers at once');
+      player.have=player.maxHave;drawBuggy();player.have=0;
     }else if(tutorialStep===2){
       tutBox('Tap CALL PUSHER to activate a boost',btn.call);
     }else if(tutorialStep===3){
