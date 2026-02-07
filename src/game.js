@@ -152,7 +152,8 @@ function spawnEntities(fromX,toX){
   let attempts=0;
   while(world.nextPot<toX){
     const x=world.nextPot+(Math.random()*50-25);
-    if(x>=fromX&&!gapAt(x)&&Math.abs(slopeAt(x))<0.72) {
+    const tooClose=world.npcs.some(n=>Math.abs(n.x-x)<160);
+    if(x>=fromX&&!gapAt(x)&&Math.abs(slopeAt(x))<0.72&&!tooClose) {
       world.pots.push({x,r:20,done:0,dodge:0,flash:0});
       world.nextPot+=180+Math.random()*220;
       attempts=0;
@@ -168,7 +169,8 @@ function spawnEntities(fromX,toX){
   attempts=0;
   while(world.nextNpc<toX){
     const x=world.nextNpc+(Math.random()*60-30);
-    if(x>=fromX&&!gapAt(x)&&Math.abs(slopeAt(x))<0.52) {
+    const tooClose=world.pots.some(p=>Math.abs(p.x-x)<160);
+    if(x>=fromX&&!gapAt(x)&&Math.abs(slopeAt(x))<0.52&&!tooClose) {
       world.npcs.push({x,got:0,wave:Math.random()*TAU});
       world.nextNpc+=250+Math.random()*350;
       attempts=0;
