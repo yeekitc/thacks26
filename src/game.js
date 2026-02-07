@@ -182,47 +182,33 @@ function ensureWorld(toX){
   while(world.lastX<toX){
     const x0=world.lastX,y0=world.lastY;
     if(x0>world.nextGap&&Math.random()<0.45){
-      // Approach to gap - moderate slope
-      const approach=60+Math.random()*50;
-      const approachSlope=0.15+Math.random()*0.15;
+      const approach=80+Math.random()*60;
+      const approachSlope=0.22+Math.random()*0.18;
       const x1=x0+approach,y1=y0+approach*approachSlope;
       addPoint(x1,y1);
-
-      // Ramp up before gap - steeper
-      const rampLen=70+Math.random()*40;
-      const rampSlope=0.42+Math.random()*0.25;
+      const rampLen=60+Math.random()*30;
+      const rampSlope=0.35+Math.random()*0.20;
       const x2=x1+rampLen,y2=y1+rampLen*rampSlope;
       addPoint(x2,y2);
-
-      // Peak point at gap edge
-      const peakLen=30+Math.random()*20;
-      const peakSlope=0.08+Math.random()*0.08;
-      const peakX=x2+peakLen,peakY=y2+peakLen*peakSlope;
-      addPoint(peakX,peakY);
-
-      // Create gap
-      const gw=120+Math.random()*130;
-      world.gaps.push({a:peakX,b:peakX+gw,btm:peakY+190+Math.random()*120});
-
-      // Landing point at other side
-      const landX=peakX+gw;
-      const landY=peakY-5+Math.random()*20;
+      const lipLen=15+Math.random()*10;
+      const lipSlope=0.05+Math.random()*0.05;
+      const takeoffX=x2+lipLen,takeoffY=y2+lipLen*lipSlope;
+      addPoint(takeoffX,takeoffY);
+      const gw=140+Math.random()*140;
+      world.gaps.push({a:takeoffX,b:takeoffX+gw,btm:takeoffY+220+Math.random()*140});
+      const landX=takeoffX+gw;
+      const landY=takeoffY+25+Math.random()*35;  
       addPoint(landX,landY);
-
-      // Ramp down from landing - gentle at first
-      const downLen1=35+Math.random()*25;
-      const downSlope1=0.05+Math.random()*0.08;
+      const downLen1=40+Math.random()*30;
+      const downSlope1=0.08+Math.random()*0.10;
       const down1X=landX+downLen1,down1Y=landY+downLen1*downSlope1;
       addPoint(down1X,down1Y);
-
-      // Continue descent - back to normal
       const downLen2=70+Math.random()*60;
       const downSlope2=0.18+Math.random()*0.22;
       const down2X=down1X+downLen2,down2Y=down1Y+downLen2*downSlope2;
       addPoint(down2X,down2Y);
-
       world.lastX=down2X;world.lastY=down2Y;
-      world.nextGap=down2X+560+Math.random()*520;
+      world.nextGap=down2X+600+Math.random()*500; 
     }else{
       const len=80+Math.random()*140;
       const r=Math.random();
@@ -460,9 +446,17 @@ function drawWorld(){
     const y1=(groundY(q.a)||q.btm)-camY;
     const y2=(groundY(q.b)||q.btm)-camY;
     g.fillStyle='#2d1c12';
-    g.fillRect(x1,Math.min(y1,y2)+8,x2-x1,H);
-    g.strokeStyle='#a7773f';g.lineWidth=5;
-    g.beginPath();g.moveTo(x1,y1-7);g.lineTo(x1,y1+10);g.moveTo(x2,y2-7);g.lineTo(x2,y2+10);g.stroke();
+    g.fillRect(x1,Math.min(y1,y2)+60,x2-x1,H);
+    g.strokeStyle='#a7773f';
+    g.lineWidth=5;
+    g.beginPath();
+    g.moveTo(x1,y1-7);
+    g.lineTo(x1,y1+60); 
+    g.stroke();
+    g.beginPath();
+    g.moveTo(x2,y2-7);
+    g.lineTo(x2,y2+60); 
+    g.stroke();
   }
 
   for(let i=0;i<world.pots.length;i++){
