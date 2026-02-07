@@ -1,9 +1,23 @@
 (()=>{
 const c=document.getElementById('c'),g=c.getContext('2d',{alpha:false});
 let W=0,H=0;
-const ZOOM=0.9;
+const ZOOM=0.81;
 const PUSHER_RUN=0.5;
 const TAU=Math.PI*2;
+const GEN={
+  pot:{start:920,min:780,max:1280,jitter:36,step:42,maxTries:18,clear:220,maxSlope:0.55,gapPad:90},
+  npc:{start:340,min:430,max:860,jitter:48,step:36,maxTries:20,clear:190,maxSlope:0.42,gapPad:95},
+  bridge:{
+    start:1550,chance:0.20,min:1700,max:2900,
+    approachLen:[130,220],approachSlope:[0.10,0.18],
+    rampLen:[70,115],rampSlope:[0.22,0.32],
+    lipLen:[20,34],lipSlope:[0.03,0.08],
+    width:[120,220],btmDrop:[220,360],landDrop:[18,32],
+    settleLen1:[110,180],settleSlope1:[0.06,0.14],
+    settleLen2:[180,280],settleSlope2:[0.12,0.20]
+  },
+  terrain:{lenMin:150,lenMax:275,min:0.12,max:0.85,flatCut:0.30,flatLimit:0,topSoft:140,botSoft:600}
+};
 const btn={call:{x:0,y:0,r:0,active:0,label:'CALL PUSHER'},brake:{x:0,y:0,r:0,active:0,label:'BRAKE'},act:{x:0,y:0,r:0,active:0,label:'ACTION',disabled:true}};
 const brakePointers=new Set();
 let actPulse=0; // expanding ring timer when action becomes available
@@ -21,13 +35,14 @@ const world={
   pots:[],
   npcs:[],
   lastX:0,lastY:320,
-  nextPot:600,nextNpc:280,nextGap:760
+  nextPot:GEN.pot.start,nextNpc:GEN.npc.start,nextGap:GEN.bridge.start,
+  terrain:{slope:0.32,target:0.40,hold:0,flat:0,mode:'flow',modeLeft:0}
 };
 
 const player={
   x:80,y:0,vx:0,vy:0,speed:68,
   on:1,ang:0,airY:0,stall:0,
-  have:0,boost:0,swerve:0,maxHave:5,potholeDip:0,
+  have:0,boost:0,swerve:0,maxHave:5,potholeDip:0,potholeSlow:0,
   pusherIncoming:0,pusherStartX:0
 };
 
@@ -97,6 +112,17 @@ function sfx(name){
   else if(name==='fail'){tone(110,0.16,'triangle',0.04,0.5)}
 }
 
+function rr(a,b){return a+Math.random()*(b-a)}
+
+function nearGap(x,pad){
+  const a=world.gaps;
+  for(let i=0;i<a.length;i++){
+    const q=a[i];
+    if(x>q.a-pad&&x<q.b+pad) return 1;
+  }
+  return 0;
+}
+
 function segAt(x){
   const p=world.pts;
   let lo=0,hi=p.length-2;
@@ -160,38 +186,90 @@ function addPoint(x,y){
   world.lastX=x;world.lastY=y;
 }
 
+function chooseTerrainMode(x0){
+  const y=world.lastY;
+  const distToGap=world.nextGap-x0;
+  if(y>560) return {mode:'recover',target:rr(-0.10,0.04),hold:2+((Math.random()*2)|0)};
+  if(y<170) return {mode:'drop',target:rr(0.56,0.78),hold:2+((Math.random()*2)|0)};
+  const r=Math.random();
+  if(distToGap<430){
+    if(r<0.82) return {mode:'drop',target:rr(0.55,0.82),hold:2+((Math.random()*2)|0)};
+    return {mode:'flow',target:rr(0.40,0.58),hold:2+((Math.random()*2)|0)};
+  }
+  if(r<0.58) return {mode:'drop',target:rr(0.52,0.82),hold:2+((Math.random()*3)|0)};
+  if(r<0.96) return {mode:'flow',target:rr(0.38,0.60),hold:2+((Math.random()*3)|0)};
+  return {mode:'recover',target:rr(0.08,0.22),hold:1+((Math.random()*2)|0)};
+}
+
+function nextTerrainSlope(x0){
+  const t=world.terrain;
+  if(t.modeLeft<=0||t.hold<=0){
+    const m=chooseTerrainMode(x0);
+    t.mode=m.mode;t.target=m.target;t.hold=m.hold;t.modeLeft=m.hold;
+  }
+  t.modeLeft--;
+  t.hold--;
+  const turn=t.mode==='drop'?0.17:t.mode==='flow'?0.13:0.10;
+  const jit=t.mode==='drop'?0.035:t.mode==='flow'?0.027:0.020;
+  const delta=Math.max(-turn,Math.min(turn,t.target-t.slope));
+  t.slope+=delta+(Math.random()*2-1)*jit;
+  if(Math.abs(t.slope)<GEN.terrain.flatCut) t.flat++;
+  else t.flat=0;
+  if(t.flat>GEN.terrain.flatLimit){
+    if(world.lastY>520){t.mode='recover';t.target=rr(-0.08,0.06);}
+    else{t.mode='drop';t.target=rr(0.50,0.76);}
+    t.modeLeft=2;t.hold=2;t.flat=0;
+  }
+  if(x0<900&&t.slope<0.38) t.slope=rr(0.38,0.58);
+  if(world.lastY<155){
+    t.mode='drop';t.target=rr(0.52,0.74);
+    t.modeLeft=Math.max(t.modeLeft,2);
+    t.slope=Math.max(t.slope,0.28);
+  }
+  if(world.lastY>585){
+    t.mode='recover';t.target=rr(-0.16,-0.04);
+    t.modeLeft=Math.max(t.modeLeft,2);
+    t.slope=Math.min(t.slope,0.08);
+  }
+  t.slope=Math.max(GEN.terrain.min,Math.min(GEN.terrain.max,t.slope));
+  return t.slope;
+}
+
 function spawnEntities(fromX,toX){
   if(toX<=fromX) return;
+  const pc=GEN.pot,nc=GEN.npc;
   let attempts=0;
   while(world.nextPot<toX){
-    const x=world.nextPot+(Math.random()*50-25);
-    const tooClose=world.npcs.some(n=>Math.abs(n.x-x)<160);
-    if(x>=fromX&&!gapAt(x)&&Math.abs(slopeAt(x))<0.72&&!tooClose) {
+    const x=world.nextPot+(Math.random()*2-1)*pc.jitter;
+    const tooCloseNpc=world.npcs.some(n=>Math.abs(n.x-x)<pc.clear);
+    const tooClosePot=world.pots.some(p=>Math.abs(p.x-x)<pc.clear*0.72);
+    if(x>=fromX&&!nearGap(x,pc.gapPad)&&Math.abs(slopeAt(x))<pc.maxSlope&&!tooCloseNpc&&!tooClosePot) {
       world.pots.push({x,r:20,done:0,dodge:0,flash:0});
-      world.nextPot+=360+Math.random()*400;
+      world.nextPot+=rr(pc.min,pc.max);
       attempts=0;
     } else {
-      world.nextPot+=30;
+      world.nextPot+=pc.step;
       attempts++;
-      if(attempts>20) {
-        world.nextPot+=360+Math.random()*400;
+      if(attempts>pc.maxTries) {
+        world.nextPot+=rr(pc.min,pc.max)*0.5;
         attempts=0;
       }
     }
   }
   attempts=0;
   while(world.nextNpc<toX){
-    const x=world.nextNpc+(Math.random()*60-30);
-    const tooClose=world.pots.some(p=>Math.abs(p.x-x)<160);
-    if(x>=fromX&&!gapAt(x)&&Math.abs(slopeAt(x))<0.52&&!tooClose) {
+    const x=world.nextNpc+(Math.random()*2-1)*nc.jitter;
+    const tooClosePot=world.pots.some(p=>Math.abs(p.x-x)<nc.clear);
+    const tooCloseNpc=world.npcs.some(n=>!n.got&&Math.abs(n.x-x)<nc.clear*0.75);
+    if(x>=fromX&&!nearGap(x,nc.gapPad)&&Math.abs(slopeAt(x))<nc.maxSlope&&!tooClosePot&&!tooCloseNpc) {
       world.npcs.push({x,got:0,wave:Math.random()*TAU});
-      world.nextNpc+=250+Math.random()*350;
+      world.nextNpc+=rr(nc.min,nc.max);
       attempts=0;
     } else {
-      world.nextNpc+=30;
+      world.nextNpc+=nc.step;
       attempts++;
-      if(attempts>20) {
-        world.nextNpc+=250+Math.random()*350;
+      if(attempts>nc.maxTries) {
+        world.nextNpc+=rr(nc.min,nc.max)*0.45;
         attempts=0;
       }
     }
@@ -200,45 +278,55 @@ function spawnEntities(fromX,toX){
 
 function ensureWorld(toX){
   const startX=world.lastX;
+  const bc=GEN.bridge;
   while(world.lastX<toX){
     const x0=world.lastX,y0=world.lastY;
-    if(x0>world.nextGap&&Math.random()<0.45){
-      const approach=80+Math.random()*60;
-      const approachSlope=0.22+Math.random()*0.18;
+    if(x0>world.nextGap&&Math.random()<bc.chance){
+      const approach=rr(bc.approachLen[0],bc.approachLen[1]);
+      const approachSlope=rr(bc.approachSlope[0],bc.approachSlope[1]);
       const x1=x0+approach,y1=y0+approach*approachSlope;
       addPoint(x1,y1);
-      const rampLen=60+Math.random()*30;
-      const rampSlope=0.35+Math.random()*0.20;
+      const rampLen=rr(bc.rampLen[0],bc.rampLen[1]);
+      const rampSlope=rr(bc.rampSlope[0],bc.rampSlope[1]);
       const x2=x1+rampLen,y2=y1+rampLen*rampSlope;
       addPoint(x2,y2);
-      const lipLen=15+Math.random()*10;
-      const lipSlope=0.05+Math.random()*0.05;
+      const lipLen=rr(bc.lipLen[0],bc.lipLen[1]);
+      const lipSlope=rr(bc.lipSlope[0],bc.lipSlope[1]);
       const takeoffX=x2+lipLen,takeoffY=y2+lipLen*lipSlope;
       addPoint(takeoffX,takeoffY);
-      const gw=140+Math.random()*140;
-      world.gaps.push({a:takeoffX,b:takeoffX+gw,btm:takeoffY+220+Math.random()*140,river:Math.random()<0.5,seed:Math.random()});
+      const gw=rr(bc.width[0],bc.width[1]);
+      world.gaps.push({a:takeoffX,b:takeoffX+gw,btm:takeoffY+rr(bc.btmDrop[0],bc.btmDrop[1]),river:Math.random()<0.5,seed:Math.random()});
       const landX=takeoffX+gw;
-      const landY=takeoffY+25+Math.random()*35;  
+      const landY=takeoffY+rr(bc.landDrop[0],bc.landDrop[1]);  
       addPoint(landX,landY);
-      const downLen1=40+Math.random()*30;
-      const downSlope1=0.08+Math.random()*0.10;
+      const downLen1=rr(bc.settleLen1[0],bc.settleLen1[1]);
+      const downSlope1=rr(bc.settleSlope1[0],bc.settleSlope1[1]);
       const down1X=landX+downLen1,down1Y=landY+downLen1*downSlope1;
       addPoint(down1X,down1Y);
-      const downLen2=70+Math.random()*60;
-      const downSlope2=0.18+Math.random()*0.22;
+      const downLen2=rr(bc.settleLen2[0],bc.settleLen2[1]);
+      const downSlope2=rr(bc.settleSlope2[0],bc.settleSlope2[1]);
       const down2X=down1X+downLen2,down2Y=down1Y+downLen2*downSlope2;
       addPoint(down2X,down2Y);
       world.lastX=down2X;world.lastY=down2Y;
-      world.nextGap=down2X+600+Math.random()*500; 
+      world.nextGap=down2X+rr(bc.min,bc.max);
+      world.terrain.hold=0;world.terrain.modeLeft=0;world.terrain.flat=0;
     }else{
-      const len=80+Math.random()*140;
-      const r=Math.random();
-      let s=r<0.12?0.04+Math.random()*0.06:r<0.50?0.18+Math.random()*0.38:r<0.92?0.38+Math.random()*0.50:-0.12+Math.random()*0.10;
-      const inStartZone=x0<700;
-      if(inStartZone&&s<0.05) s=0.15+Math.random()*0.25;
-      if(world.lastY<150&&s<0.05) s=0.25+Math.random()*0.3;
-      if(world.lastY>560&&s>0.05) s=-0.15+Math.random()*0.12;
+      const len=rr(GEN.terrain.lenMin,GEN.terrain.lenMax);
+      const s=nextTerrainSlope(x0);
       let y=y0+len*s;
+      if(y>GEN.terrain.botSoft){
+        const over=y-GEN.terrain.botSoft;
+        y=GEN.terrain.botSoft-over*0.38;
+        world.terrain.mode='recover';world.terrain.target=rr(-0.22,-0.06);world.terrain.modeLeft=Math.max(world.terrain.modeLeft,2);world.terrain.flat=0;
+      }else if(y<GEN.terrain.topSoft){
+        const over=GEN.terrain.topSoft-y;
+        y=GEN.terrain.topSoft+over*0.38;
+        world.terrain.mode='drop';world.terrain.target=rr(0.34,0.56);world.terrain.modeLeft=Math.max(world.terrain.modeLeft,2);world.terrain.flat=0;
+      }
+      if(Math.abs(y-y0)<14){
+        const forced=world.lastY>510?rr(-0.06,0.08):rr(0.42,0.70);
+        y=y0+len*forced;
+      }
       y=Math.max(120,Math.min(620,y));
       addPoint(x0+len,y);
     }
@@ -259,14 +347,15 @@ function resetRun(){
   world.pts=[{x:-240,y:300},{x:0,y:320}];
   world.gaps=[];world.pots=[];world.npcs=[];
   world.lastX=0;world.lastY=320;
-  world.nextPot=600;world.nextNpc=240;world.nextGap=760;
+  world.nextPot=GEN.pot.start;world.nextNpc=GEN.npc.start;world.nextGap=GEN.bridge.start;
+  world.terrain.slope=0.32;world.terrain.target=0.40;world.terrain.hold=0;world.terrain.flat=0;world.terrain.mode='flow';world.terrain.modeLeft=0;
   player.x=80;player.speed=68;player.vx=0;player.vy=0;player.on=1;player.ang=0;
-  player.have=0;player.boost=0;player.swerve=0;player.airY=0;player.stall=0;player.potholeDip=0;player.pusherIncoming=0;player.pusherStartX=0;
+  player.have=0;player.boost=0;player.swerve=0;player.airY=0;player.stall=0;player.potholeDip=0;player.potholeSlow=0;player.pusherIncoming=0;player.pusherStartX=0;
   btnFloats.length=0;actPulse=0;
   ensureWorld(player.x+2200);
   const gy=groundY(player.x)||320;
   player.y=gy-16;
-  camX=player.x-W*0.33;camY=player.y-H*0.58;
+  camX=player.x-W*0.30;camY=player.y-H*0.58;
   startX=player.x;
 }
 
@@ -341,7 +430,6 @@ function updatePlay(dt){
     player.pusherIncoming=Math.max(0,player.pusherIncoming-dt);
     if(player.pusherIncoming<=0){
       player.boost=1.8;
-      player.speed=Math.min(416,player.speed+80);
       burst(player.x-15,player.y+8,14,'#ffde94',150);
     }
   }
@@ -354,14 +442,16 @@ function updatePlay(dt){
 
   player.swerve=Math.max(0,player.swerve-dt);
   player.potholeDip=Math.max(0,player.potholeDip-dt*3);
+  player.potholeSlow=Math.max(0,player.potholeSlow-dt);
 
   if(player.on){
     const sl=slopeAt(player.x);
     let acc=sl*304-22;
     if(input.brake) acc-=144;
-    if(player.boost>0) acc+=340;
+    if(player.boost>0) acc+=385;
+    if(player.potholeSlow>0) acc-=240;
     player.speed+=acc*dt;
-    player.speed=Math.max(0,Math.min(416,player.speed));
+    player.speed=Math.max(0,Math.min(541,player.speed));
     player.x+=player.speed*dt;
     const gy=groundY(player.x);
     if(gy==null){
@@ -379,7 +469,7 @@ function updatePlay(dt){
       player.vx=Math.max(14,player.vx-112*dt);
       player.ang-=1.8*dt;
     }else player.ang+=0.75*dt;
-    if(player.boost>0) player.vx+=85*dt;
+    if(player.boost>0) player.vx+=96*dt;
     player.vy+=720*dt;
     player.x+=player.vx*dt;
     player.y+=player.vy*dt;
@@ -413,7 +503,7 @@ function updatePlay(dt){
       if(p.dodge){
         if(gy!=null) textDisplays.push({x:p.x,y:gy-40,text:'swerved',time:1.0});
       }else{
-        player.speed=Math.max(0,player.speed*0.85-12);
+        player.potholeSlow=0.3;
         player.potholeDip=0.35;
         burst(p.x,groundY(p.x)-6,12,'#6e5a3f',140);
         sfx('hit');
@@ -427,7 +517,7 @@ function updatePlay(dt){
   if(player.stall>1.05){endRun('Out of momentum',0);return;}
 
   score=Math.max(0,Math.floor((player.x-startX)/10));
-  camX+=(player.x-W*0.33-camX)*Math.min(1,dt*4.5);
+  camX+=(player.x-W*0.30-camX)*Math.min(1,dt*4.5);
   camY+=(player.y-H*0.58-camY)*Math.min(1,dt*4.2);
   hintT=Math.max(0,hintT-dt);
 
@@ -704,7 +794,7 @@ function drawHud(){
   g.font='600 13px system-ui,sans-serif';
   g.fillText('BEST '+best+' m',20+hx,53+hy);
 
-  const v=Math.min(1,player.speed/336);
+  const v=Math.min(1,player.speed/437);
   g.fillStyle='rgba(0,0,0,.35)';g.fillRect(265+hx,18+hy,170,16);
   g.fillStyle=v>.67?'#67e18f':v>.34?'#ffd36a':'#ff8c5a';g.fillRect(267+hx,20+hy,166*v,12);
   g.strokeStyle='rgba(255,255,255,.4)';g.strokeRect(265+hx,18+hy,170,16);
@@ -1075,7 +1165,7 @@ function update(dt){
     }
     ensureWorld(player.x+W+1200);
     const gy=groundY(player.x)||320;
-    camX+=(player.x-W*0.33-camX)*Math.min(1,dt*3.2);
+    camX+=(player.x-W*0.30-camX)*Math.min(1,dt*3.2);
     camY+=(gy-16-H*0.58-camY)*Math.min(1,dt*3);
     for(let i=particles.length-1;i>=0;i--){
       const p=particles[i];
@@ -1152,6 +1242,6 @@ c.addEventListener('pointerleave',pointerUp);
 resize();
 ensureWorld(2200);
 player.y=(groundY(player.x)||320)-16;
-camX=player.x-W*0.33;camY=player.y-H*0.58;
+camX=player.x-W*0.30;camY=player.y-H*0.58;
 requestAnimationFrame(loop);
 })();
