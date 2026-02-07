@@ -672,6 +672,8 @@ function render(){
       g.fillText('BUGGY ON',W*0.5,H*0.4);
       g.font='600 '+Math.max(20,W*0.035)+'px system-ui,sans-serif';
       g.fillText('CMU Tradition on Flagstaff Hill',W*0.5,H*0.48);
+      g.font='600 14px system-ui,sans-serif';
+      g.fillText('tap to skip tutorial at any point and start playing',W*0.5,H*0.54);
     }else if(tutorialStep===1){
       g.font='600 14px system-ui,sans-serif';
       const text='You can hold up to 5 pushers at once';
@@ -702,9 +704,6 @@ function render(){
       const bx=btn.call.x,by=btn.call.y,br=btn.call.r;
       g.strokeStyle='#ffe08f';g.lineWidth=4;
       g.beginPath();g.arc(bx,by,br+8,0,TAU);g.stroke();
-      g.beginPath();g.moveTo(W*0.5,boxY+boxH);g.lineTo(bx,by-br-8);
-      g.lineTo(bx-8,by-br);g.moveTo(bx,by-br-8);g.lineTo(bx+8,by-br);
-      g.stroke();
     }else if(tutorialStep===3){
       g.font='600 14px system-ui,sans-serif';
       const text='Use this to either 1 dodge potholes or 2 pick up pushers';
@@ -720,9 +719,6 @@ function render(){
       const bx=btn.act.x,by=btn.act.y,br=btn.act.r;
       g.strokeStyle='#ffe08f';g.lineWidth=4;
       g.beginPath();g.arc(bx,by,br+8,0,TAU);g.stroke();
-      g.beginPath();g.moveTo(W*0.5,boxY+boxH);g.lineTo(bx,by-br-8);
-      g.lineTo(bx-8,by-br);g.moveTo(bx,by-br-8);g.lineTo(bx+8,by-br);
-      g.stroke();
     }else if(tutorialStep===4){
       g.font='600 14px system-ui,sans-serif';
       const text='Hope you know what this one does';
@@ -738,9 +734,6 @@ function render(){
       const bx=btn.brake.x,by=btn.brake.y,br=btn.brake.r;
       g.strokeStyle='#ffe08f';g.lineWidth=4;
       g.beginPath();g.arc(bx,by,br+8,0,TAU);g.stroke();
-      g.beginPath();g.moveTo(W*0.5,boxY+boxH);g.lineTo(bx,by-br-8);
-      g.lineTo(bx-8,by-br);g.moveTo(bx,by-br-8);g.lineTo(bx+8,by-br);
-      g.stroke();
     }else{
       g.font='600 14px system-ui,sans-serif';
       const lines=['Looks like all of Pittsburgh\'s 446 bridges are down too,','so you\'ll have to jump them!','If you run out of speed or you crash, run ends.'];
@@ -768,9 +761,9 @@ function render(){
   if(mode==='over'){
     g.fillStyle='rgba(0,0,0,.52)';g.fillRect(W*0.5-215,H*0.2,430,240);
     g.fillStyle='#fff';g.textAlign='center';
-    g.font='800 42px system-ui,sans-serif';g.fillText('RUN OVER',W*0.5,H*0.31);
-    g.font='700 22px system-ui,sans-serif';g.fillText(score+' m',W*0.5,H*0.39);
-    g.font='600 16px system-ui,sans-serif';g.fillText(reason,W*0.5,H*0.45);
+    g.font='800 42px system-ui,sans-serif';g.fillText('RUN OVER',W*0.5,H*0.28);
+    g.font='700 24px system-ui,sans-serif';g.fillText(reason,W*0.5,H*0.36);
+    g.font='700 22px system-ui,sans-serif';g.fillText(score+' m',W*0.5,H*0.44);
     g.font='700 20px system-ui,sans-serif';g.fillStyle='#ffe08f';g.fillText('TAP TO RETRY',W*0.5,H*0.55+Math.sin(tNow*6)*3);
     g.fillStyle='#fff';g.font='600 14px system-ui,sans-serif';g.fillText('A: retry | Collect multiple pushers and save them for big gaps',W*0.5,H*0.62);
     g.textAlign='left';
