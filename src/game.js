@@ -18,6 +18,8 @@ const BRIDGE_WIDTH_SCALE=0.85;
 const BRAKE_DECEL_GROUND=980;
 const BRAKE_DECEL_AIR=720;
 const PUSHER_RUN=0.5;
+const PUSHER_FOLLOW_OFFSET=40;
+const PUSHER_STOP_ALPHA=0.75;
 const TAU=Math.PI*2;
 const BUGGY={
   rideHeight:11,      // distance from buggy origin to wheel-ground contact
@@ -59,6 +61,7 @@ const world={
   gaps:[],
   pots:[],
   npcs:[],
+  stoppedPushers:[],
   lastX:0,lastY:320,deepY:320,
   nextPot:GEN.pot.start,nextNpc:GEN.npc.start,nextGap:GEN.bridge.start,
   terrain:{slope:0.32,target:0.40,hold:0,flat:0,mode:'flow',modeLeft:0}
@@ -68,7 +71,8 @@ const player={
   x:80,y:0,vx:0,vy:0,speed:68,
   on:1,ang:0,airY:0,stall:0,
   have:0,boost:0,swerve:0,maxHave:3,potholeDip:0,potholeSlow:0,
-  pusherIncoming:0,pusherStartX:0,boostCarry:0
+  pusherIncoming:0,pusherStartX:0,boostCarry:0,
+  pusherX:0,pusherY:0,pusherWave:0,pusherActive:0,pusherDropped:0
 };
 
 const particles=[];
@@ -581,17 +585,19 @@ function trimWorld(){
   world.gaps=world.gaps.filter(v=>v.b>cut);
   world.pots=world.pots.filter(v=>v.x>cut-80);
   world.npcs=world.npcs.filter(v=>!v.got&&v.x>cut-100||v.got&&player.x-v.x<400);
+  world.stoppedPushers=world.stoppedPushers.filter(v=>v.x>cut-140);
 }
 
 function resetRun(){
   mode='play';reason='';score=0;newBest=0;rollT=0;
   world.pts=[{x:-240,y:300},{x:0,y:320}];
-  world.gaps=[];world.pots=[];world.npcs=[];
+  world.gaps=[];world.pots=[];world.npcs=[];world.stoppedPushers=[];
   world.lastX=0;world.lastY=320;world.deepY=320;
   world.nextPot=GEN.pot.start;world.nextNpc=GEN.npc.start;world.nextGap=GEN.bridge.start;
   world.terrain.slope=0.32;world.terrain.target=0.40;world.terrain.hold=0;world.terrain.flat=0;world.terrain.mode='flow';world.terrain.modeLeft=0;
   player.x=80;player.speed=68;player.vx=0;player.vy=0;player.on=1;player.ang=0;
   player.have=0;player.boost=0;player.swerve=0;player.airY=0;player.stall=0;player.potholeDip=0;player.potholeSlow=0;player.pusherIncoming=0;player.pusherStartX=0;player.boostCarry=0;
+  player.pusherX=0;player.pusherY=0;player.pusherWave=0;player.pusherActive=0;player.pusherDropped=0;
   centerCues.length=0;actPulse=0;
   ensureWorld(player.x+2200);
   const gy=groundY(player.x)||320;
@@ -668,9 +674,85 @@ function tryCall(){
     queueCenterCue(btn.call.label,{dur:0.88,size:24,col:'#b8e6ff'});
     player.have--;
     player.pusherIncoming=PUSHER_RUN;
-    player.pusherStartX=camX-40;
+    player.pusherDropped=0;
+    player.pusherStartX=camX-PUSHER_FOLLOW_OFFSET;
+    player.pusherWave=Math.random()*TAU;
+    player.pusherX=player.pusherStartX;
+    const startGy=groundY(player.pusherStartX);
+    player.pusherY=startGy==null?player.y+12:startGy;
+    player.pusherActive=1;
     sfx('boost');burst(player.x-15,player.y+8,14,'#ffde94',150);
   }
+}
+
+function pushStoppedPusher(x,y,wave){
+  if(!Number.isFinite(x)||!Number.isFinite(y)) return;
+  world.stoppedPushers.push({x,y,wave});
+  if(world.stoppedPushers.length>12) world.stoppedPushers.shift();
+}
+
+function stopActivePusherVisual(){
+  if(!player.pusherActive) return;
+  pushStoppedPusher(player.pusherX,player.pusherY,player.pusherWave);
+  player.pusherActive=0;
+  player.pusherDropped=1;
+}
+
+function updatePusherVisual(){
+  if(player.pusherDropped){
+    if(player.pusherIncoming<=0&&player.boost<=0) player.pusherDropped=0;
+    return;
+  }
+
+  if(player.pusherIncoming>0){
+    if(!player.on){
+      stopActivePusherVisual();
+      return;
+    }
+    const t=1-player.pusherIncoming/PUSHER_RUN;
+    const eased=1-Math.pow(1-t,2);
+    const targetX=player.x-PUSHER_FOLLOW_OFFSET;
+    const px=player.pusherStartX+(targetX-player.pusherStartX)*eased;
+    const gy=groundY(px);
+    if(gy==null){
+      stopActivePusherVisual();
+      return;
+    }
+    player.pusherX=px;
+    player.pusherY=gy;
+    player.pusherActive=1;
+    return;
+  }
+
+  if(player.boost>0){
+    if(!player.pusherActive){
+      if(!player.on) return;
+      const startX=player.x-PUSHER_FOLLOW_OFFSET;
+      const gy0=groundY(startX);
+      if(gy0==null) return;
+      player.pusherActive=1;
+      player.pusherWave=Math.random()*TAU;
+      player.pusherX=startX;
+      player.pusherY=gy0;
+    }
+
+    if(!player.on){
+      stopActivePusherVisual();
+      return;
+    }
+
+    const px=player.x-PUSHER_FOLLOW_OFFSET;
+    const gy=groundY(px);
+    if(gy==null){
+      stopActivePusherVisual();
+      return;
+    }
+    player.pusherX=px;
+    player.pusherY=gy;
+    return;
+  }
+
+  if(player.pusherActive) stopActivePusherVisual();
 }
 
 function updatePlay(dt){
@@ -765,6 +847,8 @@ function updatePlay(dt){
     }
     if(player.y>camY+H+260){endRun('Could not recover',0);return;}
   }
+
+  updatePusherVisual();
 
   for(let i=0;i<world.pots.length;i++){
     const p=world.pots[i];
@@ -935,6 +1019,50 @@ function drawWorld(){
   }
 }
 
+function drawPusherFigure(x,y,opt){
+  const o=opt||{};
+  const sx=x-camX;
+  if(sx<-50||sx>W+50) return;
+
+  const running=!!o.running;
+  const runSpeed=o.runSpeed||8;
+  const wave=o.wave||0;
+  const alpha=o.alpha==null?1:o.alpha;
+  let armSwing=0,legLift=0,legBack=0,lean=0;
+
+  if(running){
+    const runPhase=tNow*runSpeed+wave;
+    legLift=Math.abs(Math.sin(runPhase))*(o.legLift||6);
+    legBack=Math.sin(runPhase)*(o.legBack||3);
+    armSwing=Math.sin(runPhase)*(o.armSwing||3.5);
+    lean=o.lean==null?-0.18:o.lean;
+  }else{
+    const idle=Math.sin(tNow*2+wave)*0.7;
+    armSwing=idle*0.4;
+    legBack=idle*0.3;
+  }
+
+  g.save();
+  g.globalAlpha*=alpha;
+  g.translate(sx,y-camY);
+  g.rotate(lean);
+  g.strokeStyle='#f7d58d';g.lineWidth=3;g.lineCap='round';
+  g.beginPath();
+  g.moveTo(0,-8);g.lineTo(0,-38);
+  g.moveTo(0,-30);g.lineTo(8+armSwing,-24);
+  g.moveTo(0,-30);g.lineTo(-8-armSwing,-22);
+  if(running){
+    g.moveTo(0,-8);g.lineTo(3+legBack,-2+legLift);
+    g.moveTo(0,-8);g.lineTo(-3-legBack,-2-legLift);
+  }else{
+    g.moveTo(0,-8);g.lineTo(3+legBack,3);
+    g.moveTo(0,-8);g.lineTo(-3-legBack,3);
+  }
+  g.stroke();
+  g.fillStyle='#f7d58d';g.beginPath();g.arc(0,-42,4.5,0,TAU);g.fill();
+  g.restore();
+}
+
 function drawBuggy(){
   const sx=player.x-camX;
   let sy=player.y-camY;
@@ -947,56 +1075,22 @@ function drawBuggy(){
     g.beginPath();g.ellipse(sx,gy-camY+10,20+sh*10,6+sh*2,0,0,TAU);g.fill();
   }
 
-  if(player.pusherIncoming>0){
-    const t=1-player.pusherIncoming/PUSHER_RUN;
-    const eased=1-Math.pow(1-t,2);
-    const targetX=player.x-40;
-    const px=player.pusherStartX+(targetX-player.pusherStartX)*eased;
-    const pScreenX=px-camX;
-    let pGroundY;
-    const pGap=gapAt(px);
-    if(pGap){
-      const ya=groundY(pGap.a)||player.y+12;
-      const yb=groundY(pGap.b)||player.y+12;
-      const gapT=(px-pGap.a)/(pGap.b-pGap.a);
-      pGroundY=(ya+(yb-ya)*gapT)-camY;
-    }else{
-      pGroundY=(groundY(px)||player.y+12)-camY;
-    }
-    const runPhase=tNow*18;
-    const legLift=Math.abs(Math.sin(runPhase))*10;
-    const legBack=Math.sin(runPhase)*6;
-    const armSwing=Math.sin(runPhase)*5;
-    const lean=-0.18;
-    g.save();
-    g.translate(pScreenX,pGroundY);
-    g.rotate(lean);
-    g.strokeStyle='#f7d58d';g.lineWidth=3;g.lineCap='round';
-    g.beginPath();
-    g.moveTo(0,-8);g.lineTo(0,-38);
-    g.moveTo(0,-30);g.lineTo(8+armSwing,-24);
-    g.moveTo(0,-30);g.lineTo(-8-armSwing,-22);
-    g.moveTo(0,-8);g.lineTo(3+legBack,-2+legLift);
-    g.moveTo(0,-8);g.lineTo(-3-legBack,-2-legLift);
-    g.stroke();
-    g.fillStyle='#f7d58d';g.beginPath();g.arc(0,-42,4.5,0,TAU);g.fill();
-    g.restore();
+  for(let i=0;i<world.stoppedPushers.length;i++){
+    const p=world.stoppedPushers[i];
+    drawPusherFigure(p.x,p.y,{alpha:PUSHER_STOP_ALPHA,wave:p.wave});
   }
 
-  if(player.boost>0){
-    const py=(groundY(player.x-40)||player.y+12)-camY;
-    const runPhase=tNow*8;
-    const legLift=Math.abs(Math.sin(runPhase))*6;
-    const legBack=Math.sin(runPhase)*3;
-    g.strokeStyle='#f7d58d';g.lineWidth=3;g.lineCap='round';
-    g.beginPath();
-    g.moveTo(sx-40,py-8);g.lineTo(sx-40,py-36);
-    g.moveTo(sx-40,py-28);g.lineTo(sx-40+6,py-24);
-    g.moveTo(sx-40,py-30);g.lineTo(sx-40-6,py-22);
-    g.moveTo(sx-40,py-8);g.lineTo(sx-40+2+legBack,py-4+legLift);
-    g.moveTo(sx-40,py-8);g.lineTo(sx-40-2-legBack,py-4-legLift);
-    g.stroke();
-    g.fillStyle='#f7d58d';g.beginPath();g.arc(sx-40,py-40,4,0,TAU);g.fill();
+  if(player.pusherActive){
+    const incoming=player.pusherIncoming>0;
+    drawPusherFigure(player.pusherX,player.pusherY,{
+      running:incoming||player.boost>0,
+      runSpeed:incoming?18:8,
+      legLift:incoming?10:6,
+      legBack:incoming?6:3,
+      armSwing:incoming?5:3.5,
+      lean:-0.18,
+      wave:player.pusherWave
+    });
   }
 
   if(player.have>0){
