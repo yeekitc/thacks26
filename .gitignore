@@ -40,4 +40,6 @@ __pycache__/
 # Temporary files
 tmp/
 temp/
-.cache/
+.cache/src/server/leaderboard.db
+__pycache__/
+*.pyc
