@@ -11,6 +11,9 @@ const BOOST_RECOVER_TIME=0.52;
 const BOOST_RECOVER_DECEL=980;
 const SLOPE_GRAVITY=286; // slightly softer downhill pull from terrain slope
 const FIRST_BRIDGE_PUSHER_LEAD=1200;
+const BETWEEN_BRIDGES_PUSHER_LEAD=520;
+const BRIDGE_PUSHER_EDGE_PAD=140;
+const PUSHER_SPAWN_RATE=0.5;
 const BRIDGE_WIDTH_SCALE=0.85;
 const BRAKE_DECEL_GROUND=980;
 const BRAKE_DECEL_AIR=720;
@@ -421,7 +424,7 @@ function spawnEntities(fromX,toX){
     const tooClosePot=world.pots.some(p=>Math.abs(p.x-x)<nc.clear);
     const tooCloseNpc=world.npcs.some(n=>!n.got&&Math.abs(n.x-x)<nc.clear*0.75);
     if(x>=fromX&&!nearGap(x,nc.gapPad)&&Math.abs(slopeAt(x))<nc.maxSlope&&!tooClosePot&&!tooCloseNpc) {
-      world.npcs.push({x,got:0,wave:Math.random()*TAU});
+      if(Math.random()<PUSHER_SPAWN_RATE) world.npcs.push({x,got:0,wave:Math.random()*TAU});
       world.nextNpc+=rr(nc.min,nc.max);
       attempts=0;
     } else {
@@ -435,16 +438,14 @@ function spawnEntities(fromX,toX){
   }
 }
 
-function ensurePusherBeforeBridge(bridgeStartX){
+function ensureGuaranteedPusherInRange(minX,maxX){
   const nc=GEN.npc;
-  const latestX=bridgeStartX-FIRST_BRIDGE_PUSHER_LEAD;
-  if(latestX<=120) return;
-  if(world.npcs.some(n=>!n.got&&n.x<=latestX)) return;
+  const lo=Math.max(120,minX);
+  const hi=maxX;
+  if(hi<=lo) return;
+  if(world.npcs.some(n=>!n.got&&n.x>=lo&&n.x<=hi)) return;
 
-  const minX=Math.max(120,player.x+220);
-  if(minX>=latestX) return;
-
-  for(let x=latestX-40;x>=minX;x-=nc.step){
+  for(let x=hi-40;x>=lo;x-=nc.step){
     const tooClosePot=world.pots.some(p=>Math.abs(p.x-x)<nc.clear);
     const tooCloseNpc=world.npcs.some(n=>!n.got&&Math.abs(n.x-x)<nc.clear*0.75);
     if(nearGap(x,nc.gapPad)||tooClosePot||tooCloseNpc) continue;
@@ -454,9 +455,25 @@ function ensurePusherBeforeBridge(bridgeStartX){
     }
   }
 
-  // Fallback: always place one if spacing/generation checks are too strict.
-  const fallbackX=Math.max(minX,latestX-80);
+  // Fallback: still inject one if terrain/spacing checks never found a spot.
+  const fallbackX=clamp(hi-80,lo,hi);
   world.npcs.push({x:fallbackX,got:0,wave:Math.random()*TAU});
+}
+
+function ensurePusherBeforeBridge(bridgeStartX){
+  const latestX=bridgeStartX-FIRST_BRIDGE_PUSHER_LEAD;
+  const minX=Math.max(120,player.x+220);
+  if(minX>=latestX) return;
+  ensureGuaranteedPusherInRange(minX,latestX);
+}
+
+function ensurePusherBetweenBridges(prevGap,nextBridgeStartX){
+  if(!prevGap) return;
+  const minX=Math.max(prevGap.b+BRIDGE_PUSHER_EDGE_PAD,player.x+180);
+  let maxX=nextBridgeStartX-BETWEEN_BRIDGES_PUSHER_LEAD;
+  if(maxX<=minX) maxX=nextBridgeStartX-BRIDGE_PUSHER_EDGE_PAD;
+  if(maxX<=minX) return;
+  ensureGuaranteedPusherInRange(minX,maxX);
 }
 
 function ensureWorld(toX){
@@ -465,7 +482,8 @@ function ensureWorld(toX){
   while(world.lastX<toX){
     const x0=world.lastX,y0=world.lastY;
     if(x0>world.nextGap&&x0>bc.safeStart&&Math.random()<bc.chance){
-      const firstBridge=world.gaps.length===0;
+      const prevGap=world.gaps.length?world.gaps[world.gaps.length-1]:null;
+      const firstBridge=!prevGap;
       const lastI=world.pts.length-1;
       if(lastI>0){
         const prev=world.pts[lastI-1];
@@ -512,6 +530,7 @@ function ensureWorld(toX){
         w:gapW,t:gapT
       });
       if(firstBridge) ensurePusherBeforeBridge(takeoffX);
+      else ensurePusherBetweenBridges(prevGap,takeoffX);
       const downSlope1=rr(
         lerp(bc.settleSlope1[0]*0.66,bc.settleSlope1[0]*0.9,gapT),
         lerp(bc.settleSlope1[1]*0.78,bc.settleSlope1[1]*1.06,gapT)
@@ -873,15 +892,18 @@ function drawWorld(){
     const flash=p.flash>0;
     const ang=Math.atan(slopeAt(p.x));
     g.save();g.translate(sx,sy);g.rotate(ang);
-    // Subtle depression shadow
-    g.fillStyle=flash?'rgba(90,158,198,.3)':'rgba(0,0,0,.25)';
+    // Darker, higher-contrast pothole body so hazards read clearly at speed.
+    g.fillStyle=flash?'rgba(70,140,182,.45)':'rgba(0,0,0,.44)';
     g.beginPath();g.ellipse(0,2,r*1.1,rh*1.1,0,0,TAU);g.fill();
     // Inner hole
-    g.fillStyle=flash?'#4a90b8':'#1e1008';
+    g.fillStyle=flash?'#2d6d91':'#0d0704';
     g.beginPath();g.ellipse(0,0,r*0.75,rh*0.7,0,0,TAU);g.fill();
+    g.strokeStyle=flash?'rgba(125,198,234,.8)':'rgba(182,132,94,.55)';
+    g.lineWidth=2;
+    g.beginPath();g.ellipse(0,0,r*0.77,rh*0.72,0,0,TAU);g.stroke();
     // Cracks
-    g.strokeStyle=flash?'rgba(90,158,198,.5)':'rgba(0,0,0,.2)';
-    g.lineWidth=1;g.lineCap='round';
+    g.strokeStyle=flash?'rgba(70,140,182,.8)':'rgba(0,0,0,.55)';
+    g.lineWidth=1.4;g.lineCap='round';
     for(let j=0;j<4;j++){
       const a=j*1.5+((i*3)%4)*0.4;
       g.beginPath();
