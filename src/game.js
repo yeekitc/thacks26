@@ -49,6 +49,7 @@ const btn={call:{x:0,y:0,r:0,active:0,label:'CALL PUSHER'},act:{x:0,y:0,r:0,acti
 let actPulse=0; // expanding ring timer when action becomes available
 const centerCues=[];
 let ac=null,master=null;
+let musicLoop=null,musicBeat=0;
 let mode='title',reason='';
 let tNow=0,score=0,best=0,startX=0,newBest=0;
 let camX=0,camY=0,rollT=0;
@@ -157,13 +158,284 @@ function tone(freq,dur,type,vol,slide,delay){
   o.start(now);o.stop(now+dur+0.03);
 }
 
+function noise(dur,vol,hiCut,delay){
+  if(!ac) return;
+  const now=ac.currentTime+(delay||0);
+  const bufSize=ac.sampleRate*dur;
+  const buf=ac.createBuffer(1,bufSize,ac.sampleRate);
+  const data=buf.getChannelData(0);
+  for(let i=0;i<bufSize;i++) data[i]=Math.random()*2-1;
+  const src=ac.createBufferSource();
+  src.buffer=buf;
+  const flt=ac.createBiquadFilter();
+  flt.type=hiCut?'lowpass':'allpass';
+  if(hiCut) flt.frequency.setValueAtTime(hiCut,now);
+  const v=ac.createGain();
+  v.gain.setValueAtTime(vol||0.02,now);
+  v.gain.exponentialRampToValueAtTime(0.0001,now+dur);
+  src.connect(flt);flt.connect(v);v.connect(master);
+  src.start(now);
+}
+
 function sfx(name){
-  if(name==='boost'){tone(230,0.12,'square',0.05,1.9);tone(430,0.1,'triangle',0.03,0.8,0.03)}
-  else if(name==='collect'){tone(520,0.07,'triangle',0.025,1.2)}
-  else if(name==='swerve'){tone(310,0.06,'sawtooth',0.02,0.65)}
-  else if(name==='hit'){tone(130,0.09,'square',0.04,0.6)}
-  else if(name==='crash'){tone(90,0.16,'sawtooth',0.06,0.35);tone(50,0.24,'square',0.05,0.4,0.04)}
-  else if(name==='fail'){tone(110,0.16,'triangle',0.04,0.5)}
+  if(name==='boost'){
+    tone(150,0.22,'square',0.14,2.8);
+    tone(300,0.20,'sawtooth',0.12,2.6,0.02);
+    tone(450,0.18,'triangle',0.10,2.4,0.04);
+    tone(75,0.24,'square',0.08,3.2,0.01);
+    noise(0.08,0.06,3000);
+    tone(600,0.15,'sine',0.07,3.0,0.06);
+    tone(900,0.12,'triangle',0.06,2.8,0.08);
+  }
+  else if(name==='collect'){
+    noise(0.04,0.18,8000);
+    tone(520,0.12,'triangle',0.16,1.8);
+    tone(659,0.11,'sine',0.14,1.7,0.015);
+    tone(784,0.10,'square',0.12,1.6,0.03);
+    tone(1047,0.08,'triangle',0.10,1.5,0.045);
+    tone(260,0.10,'sawtooth',0.08,1.9,0.02);
+    noise(0.06,0.10,6000,0.05);
+  }
+  else if(name==='swerve'){
+    tone(380,0.08,'sawtooth',0.12,0.55);
+    tone(760,0.07,'square',0.10,0.50,0.015);
+    noise(0.05,0.08,4000);
+    tone(220,0.06,'triangle',0.08,0.60,0.02);
+  }
+  else if(name==='hit'){
+    tone(95,0.16,'square',0.18,0.45);
+    tone(60,0.18,'sawtooth',0.15,0.40,0.02);
+    noise(0.12,0.14,800);
+    tone(180,0.10,'triangle',0.10,0.35,0.03);
+    noise(0.08,0.12,1200,0.06);
+  }
+  else if(name==='crash'){
+    tone(90,0.20,'sawtooth',0.18,0.30);
+    tone(50,0.28,'square',0.16,0.35,0.04);
+    noise(0.22,0.20,600);
+    tone(140,0.18,'triangle',0.12,0.28,0.06);
+    tone(45,0.32,'square',0.14,0.25,0.08);
+    noise(0.18,0.16,400,0.10);
+  }
+  else if(name==='fail'){
+    tone(95,0.16,'square',0.18,0.45);
+    tone(60,0.18,'sawtooth',0.15,0.40,0.02);
+    noise(0.12,0.14,800);
+    tone(180,0.10,'triangle',0.10,0.35,0.03);
+  }
+  else if(name==='whoosh'){
+    noise(0.32,0.16,2400);
+    tone(1200,0.30,'sawtooth',0.10,0.28);
+    tone(800,0.32,'triangle',0.09,0.25,0.04);
+    tone(500,0.34,'sine',0.08,0.22,0.08);
+    noise(0.28,0.14,1800,0.04);
+    tone(300,0.36,'square',0.07,0.20,0.10);
+    tone(2000,0.26,'triangle',0.06,0.30,0.02);
+  }
+}
+
+function playMusic(){
+  if(!ac||musicLoop) return;
+  const bpm=172,beat=60/bpm,eighth=beat/2;
+  const notes=[392,440,494,523,587,659,698,784,880,988];
+  const bass=[98,110,123,131];
+  const kickPattern=[0,3,8,11,14];
+  const dropKickPattern=[0,2,4,6,8,10,12,14]; // More aggressive kick pattern
+  const snarePattern=[4,12];
+  const dropSnarePattern=[4,10,12]; // Extra snare hit during drop
+  const openHatPattern=[3,7,11,15];
+  const chordProg=[0,2,3,1];
+  const chordProgAlt=[0,3,1,2]; // Alternative progression for variety
+  const leadPatterns=[
+    [0,2,4,5,4,2,1,2],
+    [4,5,7,5,4,2,1,2],
+    [2,4,5,7,5,4,2,1],
+    [5,7,8,7,5,4,2,4],
+    [7,5,4,2,4,5,7,5], // New variation
+    [0,4,7,5,4,2,5,7]  // New variation
+  ];
+  musicBeat=0;
+  const sched=()=>{
+    if(!musicLoop) return;
+    const b=musicBeat%64;
+    const bar=Math.floor(b/16);
+    const step16=b%16;
+    const isBuild=b>=40&&b<56;
+    const isPreDrop=b>=52&&b<56;
+    const isDrop=b>=56||b<16;
+    const ch=Math.floor((b%32)/8);
+
+    // FORCE DROP TO HIT ON ROOT CHORD FOR MAXIMUM IMPACT
+    let root;
+    if(b>=56||b<16){
+      root=bass[0]; // Drop always on tonic/root - THE CLIMAX!
+    }else if(b>=48&&b<52){
+      root=bass[3]; // Tension chord before drop
+    }else{
+      const useAltChord=bar===2;
+      root=bass[useAltChord?chordProgAlt[ch]:chordProg[ch]];
+    }
+
+    // Continuous groove: closed hats + occasional open hats - more variation
+    noise(0.018,isDrop?0.020:0.012,9000,0);
+    if(step16%2===1) noise(0.014,isDrop?0.014:0.008,7200,0);
+    if(openHatPattern.includes(step16)) noise(0.03,isDrop?0.034:0.018,7600,0);
+    // Add ride cymbal variation
+    if(isDrop&&step16%4===3) noise(0.025,0.012,8500,0);
+
+    // HARDER KICK - more aggressive pattern and punchier sound
+    const kickHits=isDrop?dropKickPattern:kickPattern;
+    if(kickHits.includes(step16)){
+      tone(isDrop?42:52,0.11,'sine',isDrop?0.110:0.058,0.28,0); // Lower freq, more punch
+      tone(isDrop?32:40,0.14,'sine',isDrop?0.078:0.040,0.26,0.01); // Deeper sub
+      if(isDrop) tone(24,0.16,'sine',0.052,0.24,0.02); // Extra sub layer for drop
+    }
+
+    // More aggressive snare during drop
+    const snareHits=isDrop?dropSnarePattern:snarePattern;
+    if(snareHits.includes(step16)){
+      noise(0.055,isDrop?0.068:0.032,4400,0); // Louder snare in drop
+      tone(180,0.045,'triangle',isDrop?0.038:0.021,0.55,0);
+      if(isDrop){
+        noise(0.045,0.040,3000,0.01); // Extra crack
+        tone(220,0.035,'square',0.028,0.50,0.015); // Add bite
+      }
+    }else if(!isDrop&&step16%4===2){
+      noise(0.024,0.010,3800,0);
+    }
+
+    // MASSIVE DROP IMPACT - bigger crashes + HUGE POWER CHORD STABS
+    if([0,16,32,56].includes(b)){
+      noise(0.085,isDrop?0.38:0.18,9800,0); // Way bigger crash on drop
+      if(isDrop){
+        // MASSIVE POWER CHORD STAB - This is the OOMPH!
+        const dropRoot=bass[0]; // Always use root for drop
+        tone(dropRoot,0.35,'sawtooth',0.095,1,0); // Root
+        tone(dropRoot*1.5,0.32,'square',0.078,1,0.01); // Perfect fifth
+        tone(dropRoot*2,0.30,'sawtooth',0.068,1,0.02); // Octave
+        tone(dropRoot*3,0.26,'triangle',0.048,1,0.03); // Higher octave
+        tone(dropRoot*0.5,0.38,'sine',0.085,1,0); // Sub bass
+        tone(dropRoot*4,0.22,'square',0.038,1,0.04); // Harmonic shine
+        noise(0.12,0.28,5500,0.02); // Layered crash
+        tone(48,0.20,'sine',0.065,0.35,0); // Extra impact bass
+      }
+    }
+
+    if(isBuild&&b%2===0){
+      const t=(b-40)/16;
+      const rf=180+t*520;
+      tone(rf,eighth*0.65,'triangle',0.020+t*0.028,1.9,0); // Build louder
+      noise(0.05,0.010+t*0.020,2200+t*2200,0); // More intense noise build
+      // Add tension with rising bass
+      if(b>=48) tone(40+t*60,eighth*0.50,'sine',0.030+t*0.025,1.15,0);
+    }
+
+    if(isPreDrop){
+      tone(220+(step16-4)*48,eighth*0.45,'sine',0.032,1.25,0); // Louder riser
+      // Add wobble for anticipation
+      tone(140+(step16-4)*35,eighth*0.40,'sawtooth',0.024,1.3,0);
+    }
+
+    // ENHANCED DROP IMPACT at beat 55 and 56
+    if(b===55){
+      noise(0.18,0.085,900,0); // Bigger impact
+      tone(60,0.20,'sine',0.070,0.22,0); // Lower bass drop
+      tone(980,0.12,'triangle',0.030,0.40,0.01);
+      tone(45,0.22,'sine',0.055,0.25,0.015); // Extra sub
+    }
+    if(b===56){
+      // ULTIMATE DROP MOMENT - THE BIG OOMPH!!!
+      const dropRoot=bass[0];
+      tone(38,0.26,'sine',0.120,0.36,0); // MASSIVE drop kick
+      tone(76,0.22,'triangle',0.070,0.55,0.01);
+      tone(152,0.16,'sawtooth',0.028,0.65,0.02);
+      noise(0.15,0.090,1200,0); // Big impact noise
+      tone(28,0.30,'sine',0.082,0.32,0.02); // Deep sub rumble
+
+      // EXTRA CLIMAX POWER CHORD on the drop
+      tone(dropRoot*2,0.40,'sawtooth',0.072,1,0.05);
+      tone(dropRoot*3,0.36,'square',0.055,1,0.06);
+      tone(dropRoot*1.5,0.38,'triangle',0.065,1,0.055);
+    }
+
+    // Bass line with more variation
+    if(step16===0||step16===6||step16===8||step16===12){
+      const v=isDrop?0.075:0.040; // Punchier bass in drop
+      tone(root,eighth*0.85,'triangle',v,1,0);
+      tone(root*2,eighth*0.60,'sine',v*0.55,1,0.01);
+      if(isDrop) tone(root*0.5,eighth*0.70,'sine',v*0.65,1,0.005); // Extra sub bass
+    }
+    // Add syncopated bass hits for variety
+    if((bar===1||bar===3)&&(step16===3||step16===11)){
+      tone(root*1.5,eighth*0.45,'triangle',0.038,1,0);
+    }
+    if(isDrop&&step16%2===0){
+      tone(root*0.5,eighth*0.95,'sine',0.056,1,0); // Louder sub bass in drop
+    }
+
+    // Pads with more variety
+    if(b%8===0){
+      const padV=isDrop?0.045:0.018; // MUCH thicker pads in drop for fullness
+      tone(root*2,beat*2.8,'triangle',padV,1,0);
+      tone(root*2.5,beat*2.6,'sine',padV*0.82,1,0.02);
+      tone(root*3,beat*2.4,'triangle',padV*0.55,1,0.05);
+      if(isDrop){
+        // MASSIVE PAD STACK during drop for that full climax sound
+        tone(root*4,beat*2.2,'sine',padV*0.48,1,0.08);
+        tone(root*1.5,beat*2.6,'triangle',padV*0.70,1,0.04); // Perfect fifth
+        tone(root*5,beat*2.0,'sine',padV*0.35,1,0.10); // High harmonic
+      }
+    }
+
+    // Lead melody with more variation - use different patterns
+    const melIdx=isDrop?(ch+4)%6:ch; // Different patterns for drop
+    const mel=leadPatterns[melIdx];
+    const step=(b%16)%8;
+    const n=notes[mel[step]];
+    if(!isBuild||b<52){
+      const v=isDrop?0.052:0.029; // Louder lead in drop
+      tone(n,eighth*0.52,'triangle',v,1,0);
+      tone(n*1.002,eighth*0.48,'sine',v*0.72,1,0.008);
+      if(step%2===0) tone(n*2,eighth*0.30,'sine',v*0.38,1,eighth*0.06);
+      // Add detuned layer for thickness in drop
+      if(isDrop) tone(n*0.998,eighth*0.50,'triangle',v*0.45,1,0.005);
+    }
+
+    // Accent notes with more variation
+    if((bar===1||bar===3||isDrop)&&step16%4===1){
+      const accentPatterns=[[0,2,4,7],[0,3,5,7],[2,4,7,9]]; // Multiple accent patterns
+      const accentPat=accentPatterns[bar%3];
+      const accent=accentPat[Math.floor(step16/4)];
+      const cn=notes[1]*Math.pow(2,accent/12);
+      tone(cn,eighth*0.34,'sine',isDrop?0.030:0.016,1,0);
+    }
+
+    // Enhanced arp in drop
+    if(isDrop&&step16%2===1){
+      const arp=[0,3,7,10,7,3,5,8];
+      const ai=(b%16)>>1;
+      const an=root*2*Math.pow(2,arp[ai]/12);
+      tone(an,eighth*0.26,'triangle',0.030,1,0); // Louder arp
+      tone(an*2,eighth*0.18,'sine',0.018,1,0.008); // Add octave
+    }
+
+    // Add fill variations every 8 bars for interest
+    if(step16===15&&(b===15||b===31||b===47)){
+      tone(notes[7],eighth*0.35,'triangle',0.035,0.5,0);
+      tone(notes[8],eighth*0.30,'sine',0.028,0.5,eighth*0.08);
+      noise(0.04,0.022,6000,eighth*0.12);
+    }
+
+    musicBeat++;
+    musicLoop=setTimeout(sched,eighth*990);
+  };
+  musicLoop=1;
+  sched();
+}
+
+function stopMusic(){
+  if(musicLoop) clearTimeout(musicLoop);
+  musicLoop=null;
 }
 
 function rr(a,b){return a+Math.random()*(b-a)}
@@ -640,6 +912,7 @@ function resetRun(){
   player.y=gy-BUGGY.rideHeight;
   camX=player.x-W*0.33;camY=player.y-H*camFollowY;
   startX=player.x;
+  playMusic();
 }
 
 function startRunFromTitle(){
@@ -652,6 +925,7 @@ function startRunFromTitle(){
   player.on=1;
   startX=player.x;
   deathFetched=0;fetchDeaths();
+  playMusic();
 }
 
 function normAng(a){
@@ -670,6 +944,7 @@ function burst(x,y,n,color,speed){
 function endRun(msg,crash){
   if(mode!=='play') return;
   reason=msg;mode='over';
+  stopMusic();
   score=Math.max(0,Math.floor((player.x-startX)/10));
   newBest=score>best?1:0;
   if(score>best) best=score;
@@ -850,6 +1125,7 @@ function updatePlay(dt){
     player.x+=player.speed*dt;
     const gy=groundY(player.x);
     if(gy==null){
+      if(player.on) sfx('whoosh');
       player.on=0;
       player.vx=Math.max(12,player.speed);
       player.vy=sl*player.speed*0.48;
@@ -923,6 +1199,20 @@ function updatePlay(dt){
     const s=Math.min(1,player.speed/304);
     tone(70+s*65,0.03,'triangle',0.005+s*0.004,0.9);
     rollT=0.06+(1-s)*0.12;
+  }
+
+  // Ground rumble - continuous low rumble while moving
+  if(player.on&&player.speed>5){
+    const s=Math.min(1,player.speed/340);
+    const rumbleVol=0.085+s*0.095; // WAY LOUDER - gets louder with speed
+    const rumbleFreq=220+s*380; // Higher filter cutoff at higher speeds
+    noise(0.12,rumbleVol,rumbleFreq,0); // Low continuous rumble
+    // Extra bass rumble layer - much louder
+    tone(35+s*25,0.10,'sine',0.065+s*0.065,0.95,0);
+    if(player.speed>80&&Math.random()<0.5){
+      // Extra texture rumble at higher speeds
+      noise(0.08,rumbleVol*0.7,rumbleFreq*1.5,0);
+    }
   }
 
   for(let i=particles.length-1;i>=0;i--){
