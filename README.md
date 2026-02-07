@@ -11,7 +11,10 @@ This will:
    - `src/style.css`
    - `src/game.js`
 2. Write package payload files to `build/`
-3. Compress into `build/game.tar.zst`
+3. Compress into the smallest supported artifact format:
+   - `build/game.tar.br` (preferred when `brotli` is installed)
+   - or `build/game.tar.zst`
+   - or `build/game.tar.gz`
 
 ### Build and serve with canonical script:
 ```bash
@@ -19,7 +22,7 @@ This will:
 ```
 
 This will:
-1. Build `build/game.tar.zst`
+1. Build the smallest artifact (`build/game.tar.br`, `.zst`, or `.gz`)
 2. Run `applovin_script.sh` to extract and serve on port 8000
 
 ### Dev source of truth
