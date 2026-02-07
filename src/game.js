@@ -615,6 +615,18 @@ function resetRun(){
   startX=player.x;
 }
 
+function startRunFromTitle(){
+  mode='play';reason='';score=0;newBest=0;rollT=0;
+  centerCues.length=0;actPulse=0;
+  input.brake=0;input.call=0;input.act=0;
+  brakePointers.clear();
+  btn.call.active=0;btn.act.active=0;
+  const gy=groundY(player.x)||320;
+  player.y=gy-BUGGY.rideHeight;
+  player.on=1;
+  startX=player.x;
+}
+
 function normAng(a){
   while(a>Math.PI) a-=TAU;
   while(a<-Math.PI) a+=TAU;
@@ -1452,7 +1464,6 @@ function render(){
       g.fillText('TAP TO BEGIN',W*0.5,H*0.56+Math.sin(tNow*5)*3);
     }else if(tutorialStep===1){
       tutBox('You can hold up to 3 pushers at once');
-      player.have=player.maxHave;drawBuggy();player.have=0;
     }else if(tutorialStep===2){
       tutBox('Tap CALL PUSHER to activate a boost',btn.call);
     }else if(tutorialStep===3){
@@ -1561,8 +1572,16 @@ function keyDown(e){
   }
   if(mode==='play'&&(e.key==='a'||e.key==='A')){input.call=1;btn.call.active=0.18;audioInit()}
   if(mode==='play'&&(e.key===' '||e.key==='ArrowUp')){input.act=1;btn.act.active=0.18;audioInit()}
-  if((e.key==='Enter'||e.key==='r'||e.key==='R')&&mode!=='play'){audioInit();resetRun();}
-  if((e.key===' '||e.key==='ArrowUp')&&mode!=='play'){audioInit();resetRun();}
+  if((e.key==='Enter'||e.key==='r'||e.key==='R')&&mode!=='play'){
+    audioInit();
+    if(mode==='title') startRunFromTitle();
+    else resetRun();
+  }
+  if((e.key===' '||e.key==='ArrowUp')&&mode!=='play'){
+    audioInit();
+    if(mode==='title') startRunFromTitle();
+    else resetRun();
+  }
   if(['ArrowDown','ArrowUp',' '].includes(e.key)) e.preventDefault();
 }
 
@@ -1584,12 +1603,12 @@ function pointerDown(e){
   const k=hitButton(px,py);
   if(mode==='title'){
     if(tutorialStep>=1&&px>W-100&&py<60){
-      resetRun();
+      startRunFromTitle();
     }else if(tutorialStep<5){
       tutorialStep++;
       tutorialTimer=0;
     }else{
-      resetRun();
+      startRunFromTitle();
     }
     e.preventDefault();
     return;
@@ -1627,8 +1646,7 @@ c.addEventListener('pointerup',pointerUp);
 c.addEventListener('pointercancel',pointerUp);
 c.addEventListener('pointerleave',pointerUp);
 resize();
-ensureWorld(2200);
-player.y=(groundY(player.x)||320)-BUGGY.rideHeight;
-camX=player.x-W*0.33;camY=player.y-H*camFollowY;
+resetRun();
+mode='title';
 requestAnimationFrame(loop);
 })();
