@@ -16,7 +16,7 @@ const GEN={
     settleLen1:[110,180],settleSlope1:[0.06,0.14],
     settleLen2:[180,280],settleSlope2:[0.12,0.20]
   },
-  terrain:{lenMin:150,lenMax:275,min:0.12,max:0.85,flatCut:0.30,flatLimit:0,topSoft:140,botSoft:600}
+  terrain:{lenMin:150,lenMax:275,min:-0.08,max:0.85,flatCut:0.14,flatLimit:2,maxRisePerSeg:22,maxRiseFromDeep:96}
 };
 const btn={call:{x:0,y:0,r:0,active:0,label:'CALL PUSHER'},brake:{x:0,y:0,r:0,active:0,label:'BRAKE'},act:{x:0,y:0,r:0,active:0,label:'ACTION',disabled:true}};
 const brakePointers=new Set();
@@ -34,7 +34,7 @@ const world={
   gaps:[],
   pots:[],
   npcs:[],
-  lastX:0,lastY:320,
+  lastX:0,lastY:320,deepY:320,
   nextPot:GEN.pot.start,nextNpc:GEN.npc.start,nextGap:GEN.bridge.start,
   terrain:{slope:0.32,target:0.40,hold:0,flat:0,mode:'flow',modeLeft:0}
 };
@@ -186,21 +186,19 @@ function slopeAt(x){
 function addPoint(x,y){
   world.pts.push({x,y});
   world.lastX=x;world.lastY=y;
+  world.deepY=Math.max(world.deepY,y);
 }
 
 function chooseTerrainMode(x0){
-  const y=world.lastY;
   const distToGap=world.nextGap-x0;
-  if(y>560) return {mode:'recover',target:rr(-0.10,0.04),hold:2+((Math.random()*2)|0)};
-  if(y<170) return {mode:'drop',target:rr(0.56,0.78),hold:2+((Math.random()*2)|0)};
   const r=Math.random();
   if(distToGap<430){
-    if(r<0.82) return {mode:'drop',target:rr(0.55,0.82),hold:2+((Math.random()*2)|0)};
-    return {mode:'flow',target:rr(0.40,0.58),hold:2+((Math.random()*2)|0)};
+    if(r<0.84) return {mode:'drop',target:rr(0.54,0.82),hold:2+((Math.random()*2)|0)};
+    return {mode:'flow',target:rr(0.30,0.52),hold:2+((Math.random()*2)|0)};
   }
-  if(r<0.58) return {mode:'drop',target:rr(0.52,0.82),hold:2+((Math.random()*3)|0)};
-  if(r<0.96) return {mode:'flow',target:rr(0.38,0.60),hold:2+((Math.random()*3)|0)};
-  return {mode:'recover',target:rr(0.08,0.22),hold:1+((Math.random()*2)|0)};
+  if(r<0.48) return {mode:'drop',target:rr(0.48,0.76),hold:2+((Math.random()*3)|0)};
+  if(r<0.88) return {mode:'flow',target:rr(0.20,0.50),hold:2+((Math.random()*3)|0)};
+  return {mode:'recover',target:rr(-0.12,0.02),hold:2+((Math.random()*2)|0)};
 }
 
 function nextTerrainSlope(x0){
@@ -218,21 +216,10 @@ function nextTerrainSlope(x0){
   if(Math.abs(t.slope)<GEN.terrain.flatCut) t.flat++;
   else t.flat=0;
   if(t.flat>GEN.terrain.flatLimit){
-    if(world.lastY>520){t.mode='recover';t.target=rr(-0.08,0.06);}
-    else{t.mode='drop';t.target=rr(0.50,0.76);}
+    t.mode='drop';t.target=rr(0.42,0.68);
     t.modeLeft=2;t.hold=2;t.flat=0;
   }
-  if(x0<900&&t.slope<0.38) t.slope=rr(0.38,0.58);
-  if(world.lastY<155){
-    t.mode='drop';t.target=rr(0.52,0.74);
-    t.modeLeft=Math.max(t.modeLeft,2);
-    t.slope=Math.max(t.slope,0.28);
-  }
-  if(world.lastY>585){
-    t.mode='recover';t.target=rr(-0.16,-0.04);
-    t.modeLeft=Math.max(t.modeLeft,2);
-    t.slope=Math.min(t.slope,0.08);
-  }
+  if(x0<900&&t.slope<0.34) t.slope=rr(0.34,0.54);
   t.slope=Math.max(GEN.terrain.min,Math.min(GEN.terrain.max,t.slope));
   return t.slope;
 }
@@ -316,20 +303,11 @@ function ensureWorld(toX){
       const len=rr(GEN.terrain.lenMin,GEN.terrain.lenMax);
       const s=nextTerrainSlope(x0);
       let y=y0+len*s;
-      if(y>GEN.terrain.botSoft){
-        const over=y-GEN.terrain.botSoft;
-        y=GEN.terrain.botSoft-over*0.38;
-        world.terrain.mode='recover';world.terrain.target=rr(-0.22,-0.06);world.terrain.modeLeft=Math.max(world.terrain.modeLeft,2);world.terrain.flat=0;
-      }else if(y<GEN.terrain.topSoft){
-        const over=GEN.terrain.topSoft-y;
-        y=GEN.terrain.topSoft+over*0.38;
-        world.terrain.mode='drop';world.terrain.target=rr(0.34,0.56);world.terrain.modeLeft=Math.max(world.terrain.modeLeft,2);world.terrain.flat=0;
-      }
-      if(Math.abs(y-y0)<14){
-        const forced=world.lastY>510?rr(-0.06,0.08):rr(0.42,0.70);
-        y=y0+len*forced;
-      }
-      y=Math.max(120,Math.min(620,y));
+      if(Math.abs(y-y0)<10) y=y0+len*rr(0.18,0.40);
+      const climbCap=Math.min(GEN.terrain.maxRisePerSeg,Math.max(8,len*0.085));
+      if(y<y0-climbCap) y=y0-climbCap;
+      const globalFloor=world.deepY-GEN.terrain.maxRiseFromDeep;
+      if(y<globalFloor) y=globalFloor;
       addPoint(x0+len,y);
     }
   }
@@ -348,7 +326,7 @@ function resetRun(){
   mode='play';reason='';score=0;newBest=0;rollT=0;
   world.pts=[{x:-240,y:300},{x:0,y:320}];
   world.gaps=[];world.pots=[];world.npcs=[];
-  world.lastX=0;world.lastY=320;
+  world.lastX=0;world.lastY=320;world.deepY=320;
   world.nextPot=GEN.pot.start;world.nextNpc=GEN.npc.start;world.nextGap=GEN.bridge.start;
   world.terrain.slope=0.32;world.terrain.target=0.40;world.terrain.hold=0;world.terrain.flat=0;world.terrain.mode='flow';world.terrain.modeLeft=0;
   player.x=80;player.speed=68;player.vx=0;player.vy=0;player.on=1;player.ang=0;
