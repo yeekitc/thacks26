@@ -24,8 +24,8 @@ let actPulse=0; // expanding ring timer when action becomes available
 const btnFloats=[]; // floating text items rising from action button
 let ac=null,master=null;
 let mode='title',reason='';
-let tNow=0,score=0,best=0,startX=0;
-let camX=0,camY=0,hintT=11,rollT=0;
+let tNow=0,score=0,best=0,startX=0,newBest=0;
+let camX=0,camY=0,rollT=0;
 let tutorialStep=0,tutorialTimer=0;
 const input={brake:0,call:0,act:0};
 
@@ -55,9 +55,11 @@ let safeL=0,safeR=0,safeT=0,safeB=0;
 
 function resize(){
   const dpr=Math.min(devicePixelRatio||1,2);
-  const sw=innerWidth,sh=innerHeight;
+  const vv=window.visualViewport;
+  const sw=vv?vv.width:innerWidth,sh=vv?vv.height:innerHeight;
   W=sw/ZOOM;H=sh/ZOOM;
   c.width=Math.floor(sw*dpr);c.height=Math.floor(sh*dpr);
+  c.style.width=sw+'px';c.style.height=sh+'px';
   g.setTransform(dpr*ZOOM,0,0,dpr*ZOOM,0,0);
   const cs=getComputedStyle(safeProbe);
   safeT=(parseFloat(cs.paddingTop)||0)/ZOOM;
@@ -343,7 +345,7 @@ function trimWorld(){
 }
 
 function resetRun(){
-  mode='play';reason='';score=0;hintT=11;rollT=0;
+  mode='play';reason='';score=0;newBest=0;rollT=0;
   world.pts=[{x:-240,y:300},{x:0,y:320}];
   world.gaps=[];world.pots=[];world.npcs=[];
   world.lastX=0;world.lastY=320;
@@ -355,7 +357,7 @@ function resetRun(){
   ensureWorld(player.x+2200);
   const gy=groundY(player.x)||320;
   player.y=gy-16;
-  camX=player.x-W*0.30;camY=player.y-H*0.58;
+  camX=player.x-W*0.33;camY=player.y-H*0.58;
   startX=player.x;
 }
 
@@ -376,6 +378,7 @@ function endRun(msg,crash){
   if(mode!=='play') return;
   reason=msg;mode='over';
   score=Math.max(0,Math.floor((player.x-startX)/10));
+  newBest=score>best?1:0;
   if(score>best) best=score;
   if(crash){burst(player.x,player.y,26,'#ff9157',260);sfx('crash')}else sfx('fail');
 }
@@ -519,8 +522,6 @@ function updatePlay(dt){
   score=Math.max(0,Math.floor((player.x-startX)/10));
   camX+=(player.x-W*0.30-camX)*Math.min(1,dt*4.5);
   camY+=(player.y-H*0.58-camY)*Math.min(1,dt*4.2);
-  hintT=Math.max(0,hintT-dt);
-
   rollT-=dt;
   if(rollT<=0&&player.on&&player.speed>24){
     const s=Math.min(1,player.speed/304);
@@ -785,28 +786,29 @@ function drawParticles(){
 }
 
 function drawHud(){
-  const hx=safeL,hy=safeT;
-  g.fillStyle='rgba(0,0,0,.3)';
-  g.fillRect(12+hx,12+hy,240,56);
+  const s=Math.min(W,H)/400;
+  const fs1=Math.round(20*s),fs2=Math.round(13*s);
+  const pad=Math.round(14*s);
+  g.textAlign='right';
   g.fillStyle='#fff';
-  g.font='700 18px system-ui,sans-serif';
-  g.fillText('DIST '+score+' m',20+hx,34+hy);
-  g.font='600 13px system-ui,sans-serif';
-  g.fillText('BEST '+best+' m',20+hx,53+hy);
-
-  const v=Math.min(1,player.speed/437);
-  g.fillStyle='rgba(0,0,0,.35)';g.fillRect(265+hx,18+hy,170,16);
-  g.fillStyle=v>.67?'#67e18f':v>.34?'#ffd36a':'#ff8c5a';g.fillRect(267+hx,20+hy,166*v,12);
-  g.strokeStyle='rgba(255,255,255,.4)';g.strokeRect(265+hx,18+hy,170,16);
-
-  if(hintT>0){
-    const a=Math.min(1,hintT)*Math.min(1,tNow*0.7);
-    g.globalAlpha=a;
-    g.fillStyle='rgba(0,0,0,.45)';g.fillRect(W*0.5-230,H*0.08,460,56);
-    g.fillStyle='#fff';g.font='600 14px system-ui,sans-serif';
-    g.fillText('ACTION: collect pushers (max 5) / dodge potholes   A: call pusher   S or Down: brake',W*0.5-214,H*0.08+34);
-    g.globalAlpha=1;
-  }
+  g.font='700 '+fs1+'px system-ui,sans-serif';
+  g.fillText(score+' m',W-pad,pad+fs1);
+  g.fillStyle='rgba(255,255,255,.45)';
+  g.font='500 '+fs2+'px system-ui,sans-serif';
+  g.fillText('best '+best+' m',W-pad,pad+fs1+fs2+4);
+  g.textAlign='left';
+  const bw=Math.round(btn.act.r*2.2),bh=Math.round(8*s);
+  const bx=btn.act.x-bw*0.5,by=btn.act.y+btn.act.r+Math.round(18*s);
+  const v=Math.min(1,player.speed/420);
+  const br=bh*0.5;
+  g.globalAlpha=0.35;g.fillStyle='#fff';g.font='600 '+Math.max(8,Math.round(9*s))+'px system-ui,sans-serif';
+  g.textAlign='center';g.fillText('SPEED',btn.act.x,by-3);g.textAlign='left';
+  g.globalAlpha=0.45;g.fillStyle='#000';
+  roundRect(bx,by,bw,bh,br);g.fill();
+  g.globalAlpha=0.8;
+  g.fillStyle=v>.67?'#67e18f':v>.34?'#ffd36a':'#ff8c5a';
+  if(v>0){roundRect(bx+1,by+1,(bw-2)*v,bh-2,br-1);g.fill();}
+  g.globalAlpha=1;
 }
 
 function drawButton(b,key){
@@ -904,6 +906,25 @@ function drawTrees(layer){
       drawOneTree(tx,by,kind,sc,false);
     }
   }
+}
+
+function roundRect(x,y,w,h,r){
+  g.beginPath();g.moveTo(x+r,y);g.lineTo(x+w-r,y);g.quadraticCurveTo(x+w,y,x+w,y+r);
+  g.lineTo(x+w,y+h-r);g.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  g.lineTo(x+r,y+h);g.quadraticCurveTo(x,y+h,x,y+h-r);
+  g.lineTo(x,y+r);g.quadraticCurveTo(x,y,x+r,y);g.closePath();
+}
+
+function tutBox(text,hb){
+  g.textAlign='center';
+  g.font='600 15px system-ui,sans-serif';
+  const bw=Math.min(W*0.85,g.measureText(text).width+60),bh=70;
+  const bx=W*0.5-bw*0.5,by=H*0.5-bh*0.5;
+  g.fillStyle='rgba(20,14,8,.58)';
+  roundRect(bx,by,bw,bh,12);g.fill();
+  g.strokeStyle='rgba(255,255,255,.1)';g.lineWidth=1;g.stroke();
+  g.fillStyle='#fff';g.fillText(text,W*0.5,by+bh*0.5+5);
+  if(hb){g.strokeStyle='#ffe08f';g.lineWidth=4;g.beginPath();g.arc(hb.x,hb.y,hb.r+8,0,TAU);g.stroke();}
 }
 
 function render(){
@@ -1043,103 +1064,79 @@ function render(){
     if(tutorialStep===0){
       g.fillStyle='#fff';
       g.font='800 '+Math.max(42,W*0.07)+'px system-ui,sans-serif';
-      g.fillText('BUGGY ON',W*0.5,H*0.4);
-      g.font='600 '+Math.max(20,W*0.035)+'px system-ui,sans-serif';
-      g.fillText('CMU Tradition on Flagstaff Hill',W*0.5,H*0.48);
-      g.font='600 14px system-ui,sans-serif';
-      g.fillText('tap to skip tutorial at any point and start playing',W*0.5,H*0.54);
+      g.fillText('BUGGY ON',W*0.5,H*0.38);
+      g.font='600 '+Math.max(18,W*0.03)+'px system-ui,sans-serif';
+      g.fillStyle='rgba(255,255,255,.7)';
+      g.fillText('CMU Tradition on Flagstaff Hill',W*0.5,H*0.46);
+      g.fillStyle='#ffe08f';g.font='800 22px system-ui,sans-serif';
+      g.fillText('TAP TO BEGIN',W*0.5,H*0.56+Math.sin(tNow*5)*3);
     }else if(tutorialStep===1){
-      g.font='600 14px system-ui,sans-serif';
-      const text='You can hold up to 5 pushers at once';
-      const m=g.measureText(text);
-      const pad=24;
-      const boxW=m.width+pad*2;
-      const boxH=50+pad*2;
-      const boxX=W*0.5-boxW*0.5;
-      const boxY=H*0.5-boxH*0.5;
-      g.fillStyle='rgba(0,0,0,.46)';g.fillRect(boxX,boxY,boxW,boxH);
-      g.fillStyle='#fff';
-      g.fillText(text,W*0.5,boxY+boxH*0.5+5);
-      player.have=5;
-      drawBuggy();
-      player.have=0;
+      tutBox('You can hold up to 5 pushers at once');
+      player.have=5;drawBuggy();player.have=0;
     }else if(tutorialStep===2){
-      g.font='600 14px system-ui,sans-serif';
-      const text='Click to activate a pusher when you need a boost';
-      const m=g.measureText(text);
-      const pad=24;
-      const boxW=m.width+pad*2;
-      const boxH=50+pad*2;
-      const boxX=W*0.5-boxW*0.5;
-      const boxY=H*0.5-boxH*0.5;
-      g.fillStyle='rgba(0,0,0,.46)';g.fillRect(boxX,boxY,boxW,boxH);
-      g.fillStyle='#fff';
-      g.fillText(text,W*0.5,boxY+boxH*0.5+5);
-      const bx=btn.call.x,by=btn.call.y,br=btn.call.r;
-      g.strokeStyle='#ffe08f';g.lineWidth=4;
-      g.beginPath();g.arc(bx,by,br+8,0,TAU);g.stroke();
+      tutBox('Tap CALL PUSHER to activate a boost',btn.call);
     }else if(tutorialStep===3){
-      g.font='600 14px system-ui,sans-serif';
-      const text='Use this to either 1 dodge potholes or 2 pick up pushers';
-      const m=g.measureText(text);
-      const pad=24;
-      const boxW=m.width+pad*2;
-      const boxH=50+pad*2;
-      const boxX=W*0.5-boxW*0.5;
-      const boxY=H*0.5-boxH*0.5;
-      g.fillStyle='rgba(0,0,0,.46)';g.fillRect(boxX,boxY,boxW,boxH);
-      g.fillStyle='#fff';
-      g.fillText(text,W*0.5,boxY+boxH*0.5+5);
-      const bx=btn.act.x,by=btn.act.y,br=btn.act.r;
-      g.strokeStyle='#ffe08f';g.lineWidth=4;
-      g.beginPath();g.arc(bx,by,br+8,0,TAU);g.stroke();
+      tutBox('Dodge potholes or pick up pushers nearby',btn.act);
     }else if(tutorialStep===4){
-      g.font='600 14px system-ui,sans-serif';
-      const text='Hope you know what this one does';
-      const m=g.measureText(text);
-      const pad=24;
-      const boxW=m.width+pad*2;
-      const boxH=50+pad*2;
-      const boxX=W*0.5-boxW*0.5;
-      const boxY=H*0.5-boxH*0.5;
-      g.fillStyle='rgba(0,0,0,.46)';g.fillRect(boxX,boxY,boxW,boxH);
-      g.fillStyle='#fff';
-      g.fillText(text,W*0.5,boxY+boxH*0.5+5);
-      const bx=btn.brake.x,by=btn.brake.y,br=btn.brake.r;
-      g.strokeStyle='#ffe08f';g.lineWidth=4;
-      g.beginPath();g.arc(bx,by,br+8,0,TAU);g.stroke();
+      tutBox('You know what this one does',btn.brake);
     }else{
-      g.font='600 14px system-ui,sans-serif';
-      const lines=['Looks like all of Pittsburgh\'s 446 bridges are down too,','so you\'ll have to jump them!','If you run out of speed or you crash, run ends.'];
+      const lines=['All 446 Pittsburgh bridges are down,','so you\'ll have to jump the gaps!','Run out of speed or crash = run over.'];
+      g.font='600 15px system-ui,sans-serif';
       let maxW=0;
-      for(let i=0;i<lines.length;i++){
-        const w=g.measureText(lines[i]).width;
-        if(w>maxW) maxW=w;
-      }
-      const pad=24;
-      const boxW=maxW+pad*2;
-      const boxH=lines.length*22+pad*2;
-      const boxX=W*0.5-boxW*0.5;
-      const boxY=H*0.5-boxH*0.5-40;
-      g.fillStyle='rgba(0,0,0,.46)';g.fillRect(boxX,boxY,boxW,boxH);
+      for(let i=0;i<lines.length;i++){const w=g.measureText(lines[i]).width;if(w>maxW) maxW=w;}
+      const bw=Math.min(W*0.85,maxW+60),bh=lines.length*24+30;
+      const bx=W*0.5-bw*0.5,by=H*0.38-bh*0.5;
+      g.fillStyle='rgba(20,14,8,.58)';roundRect(bx,by,bw,bh,12);g.fill();
+      g.strokeStyle='rgba(255,255,255,.1)';g.lineWidth=1;g.stroke();
       g.fillStyle='#fff';
-      for(let i=0;i<lines.length;i++){
-        g.fillText(lines[i],W*0.5,boxY+pad+18+i*22);
-      }
+      for(let i=0;i<lines.length;i++) g.fillText(lines[i],W*0.5,by+24+i*24);
       g.fillStyle='#ffe08f';g.font='800 24px system-ui,sans-serif';
-      g.fillText('TAP TO START',W*0.5,boxY+boxH+50+Math.sin(tNow*4)*4);
+      g.fillText('TAP TO START',W*0.5,by+bh+45+Math.sin(tNow*4)*4);
+    }
+    if(tutorialStep>0&&tutorialStep<5){
+      g.fillStyle='rgba(255,255,255,.5)';g.font='600 13px system-ui,sans-serif';
+      g.fillText('tap to continue',W*0.5,H*0.5+60);
+    }
+    if(tutorialStep>=1){
+      g.textAlign='right';
+      g.fillStyle='rgba(255,255,255,.45)';g.font='600 14px system-ui,sans-serif';
+      g.fillText('SKIP \u25B6',W-20,30);
+      g.textAlign='center';
     }
     g.textAlign='left';
   }
 
   if(mode==='over'){
-    g.fillStyle='rgba(0,0,0,.52)';g.fillRect(W*0.5-215,H*0.2,430,240);
-    g.fillStyle='#fff';g.textAlign='center';
-    g.font='800 42px system-ui,sans-serif';g.fillText('RUN OVER',W*0.5,H*0.28);
-    g.font='700 24px system-ui,sans-serif';g.fillText(reason,W*0.5,H*0.36);
-    g.font='700 22px system-ui,sans-serif';g.fillText(score+' m',W*0.5,H*0.44);
-    g.font='700 20px system-ui,sans-serif';g.fillStyle='#ffe08f';g.fillText('TAP TO RETRY',W*0.5,H*0.55+Math.sin(tNow*6)*3);
-    g.fillStyle='#fff';g.font='600 14px system-ui,sans-serif';g.fillText('A: retry | Collect multiple pushers and save them for big gaps',W*0.5,H*0.62);
+    const s=Math.min(W,H)/400;
+    const cx=W*0.5,bw=Math.min(380,W*0.85),bh=Math.round(170*Math.min(1,s));
+    const bx=cx-bw*0.5,by=H*0.22;
+    g.fillStyle='rgba(20,14,8,.62)';
+    roundRect(bx,by,bw,bh,14);g.fill();
+    g.strokeStyle='rgba(255,255,255,.12)';g.lineWidth=1;g.stroke();
+    g.textAlign='center';
+    g.fillStyle='#fff';
+    g.font='800 '+Math.round(38*Math.min(1,s))+'px system-ui,sans-serif';
+    g.fillText('RUN OVER',cx,by+Math.round(48*Math.min(1,s)));
+    g.fillStyle='rgba(210,195,170,.55)';
+    g.font='500 '+Math.round(15*Math.min(1,s))+'px system-ui,sans-serif';
+    g.fillText(reason,cx,by+Math.round(74*Math.min(1,s)));
+    g.strokeStyle='rgba(255,255,255,.1)';g.lineWidth=1;
+    g.beginPath();g.moveTo(bx+40,by+Math.round(88*Math.min(1,s)));g.lineTo(bx+bw-40,by+Math.round(88*Math.min(1,s)));g.stroke();
+    g.fillStyle='#fff';
+    g.font='800 '+Math.round(36*Math.min(1,s))+'px system-ui,sans-serif';
+    g.fillText(score+' m',cx,by+Math.round(128*Math.min(1,s)));
+    if(newBest){
+      g.fillStyle='#ffe08f';g.font='600 '+Math.round(14*Math.min(1,s))+'px system-ui,sans-serif';
+      g.fillText('🏆 New High Score!',cx,by+Math.round(152*Math.min(1,s)));
+    }else{
+      g.fillStyle='rgba(210,195,170,.45)';g.font='500 '+Math.round(13*Math.min(1,s))+'px system-ui,sans-serif';
+      g.fillText('best: '+best+' m',cx,by+Math.round(152*Math.min(1,s)));
+    }
+    g.globalAlpha=0.8;g.fillStyle='#e0d8c8';g.font='500 '+Math.round(13*Math.min(1,s))+'px system-ui,sans-serif';
+    g.fillText('A: retry • Collect pushers & save them for big gaps',cx,by+bh+Math.round(28*Math.min(1,s)));
+    g.globalAlpha=1;
+    g.fillStyle='#ffe08f';g.font='800 '+Math.round(22*Math.min(1,s))+'px system-ui,sans-serif';
+    g.fillText('TAP TO RETRY',cx,by+bh+Math.round(60*Math.min(1,s))+Math.sin(tNow*5)*3);
     g.textAlign='left';
   }
 
@@ -1161,11 +1158,10 @@ function update(dt){
   else{
     if(mode==='title'){
       tutorialTimer+=dt;
-      if(tutorialTimer>=2&&tutorialStep<5) tutorialStep++,tutorialTimer=0;
     }
     ensureWorld(player.x+W+1200);
     const gy=groundY(player.x)||320;
-    camX+=(player.x-W*0.30-camX)*Math.min(1,dt*3.2);
+    camX+=(player.x-W*0.33-camX)*Math.min(1,dt*3.2);
     camY+=(gy-16-H*0.58-camY)*Math.min(1,dt*3);
     for(let i=particles.length-1;i>=0;i--){
       const p=particles[i];
@@ -1200,9 +1196,12 @@ function hitButton(x,y){
 
 function pointerDown(e){
   audioInit();
-  const k=hitButton(e.clientX/ZOOM,e.clientY/ZOOM);
+  const px=e.clientX/ZOOM,py=e.clientY/ZOOM;
+  const k=hitButton(px,py);
   if(mode==='title'){
-    if(tutorialStep<5){
+    if(tutorialStep>=1&&px>W-100&&py<60){
+      resetRun();
+    }else if(tutorialStep<5){
       tutorialStep++;
       tutorialTimer=0;
     }else{
@@ -1233,6 +1232,7 @@ function loop(ms){
 }
 
 addEventListener('resize',resize);
+if(window.visualViewport) visualViewport.addEventListener('resize',resize);
 addEventListener('keydown',keyDown,{passive:false});
 addEventListener('keyup',keyUp);
 c.addEventListener('pointerdown',pointerDown,{passive:false});
@@ -1242,6 +1242,6 @@ c.addEventListener('pointerleave',pointerUp);
 resize();
 ensureWorld(2200);
 player.y=(groundY(player.x)||320)-16;
-camX=player.x-W*0.30;camY=player.y-H*0.58;
+camX=player.x-W*0.33;camY=player.y-H*0.58;
 requestAnimationFrame(loop);
 })();
