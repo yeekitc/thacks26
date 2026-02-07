@@ -10,6 +10,10 @@ const BOOST_MAX_MULT=1.50;
 const BOOST_RECOVER_TIME=0.52;
 const BOOST_RECOVER_DECEL=980;
 const SLOPE_GRAVITY=286; // slightly softer downhill pull from terrain slope
+const FIRST_BRIDGE_PUSHER_LEAD=1200;
+const BRIDGE_WIDTH_SCALE=0.85;
+const BRAKE_DECEL_GROUND=980;
+const BRAKE_DECEL_AIR=720;
 const PUSHER_RUN=0.5;
 const TAU=Math.PI*2;
 const BUGGY={
@@ -431,19 +435,45 @@ function spawnEntities(fromX,toX){
   }
 }
 
+function ensurePusherBeforeBridge(bridgeStartX){
+  const nc=GEN.npc;
+  const latestX=bridgeStartX-FIRST_BRIDGE_PUSHER_LEAD;
+  if(latestX<=120) return;
+  if(world.npcs.some(n=>!n.got&&n.x<=latestX)) return;
+
+  const minX=Math.max(120,player.x+220);
+  if(minX>=latestX) return;
+
+  for(let x=latestX-40;x>=minX;x-=nc.step){
+    const tooClosePot=world.pots.some(p=>Math.abs(p.x-x)<nc.clear);
+    const tooCloseNpc=world.npcs.some(n=>!n.got&&Math.abs(n.x-x)<nc.clear*0.75);
+    if(nearGap(x,nc.gapPad)||tooClosePot||tooCloseNpc) continue;
+    if(Math.abs(slopeAt(x))<=Math.max(0.62,nc.maxSlope)){
+      world.npcs.push({x,got:0,wave:Math.random()*TAU});
+      return;
+    }
+  }
+
+  // Fallback: always place one if spacing/generation checks are too strict.
+  const fallbackX=Math.max(minX,latestX-80);
+  world.npcs.push({x:fallbackX,got:0,wave:Math.random()*TAU});
+}
+
 function ensureWorld(toX){
   const startX=world.lastX;
   const bc=GEN.bridge;
   while(world.lastX<toX){
     const x0=world.lastX,y0=world.lastY;
     if(x0>world.nextGap&&x0>bc.safeStart&&Math.random()<bc.chance){
+      const firstBridge=world.gaps.length===0;
       const lastI=world.pts.length-1;
       if(lastI>0){
         const prev=world.pts[lastI-1];
         world.pts[lastI].s=(y0-prev.y)/(x0-prev.x||1);
       }
-      const gapW=rr(bc.width[0],bc.width[1]);
-      const gapT=clamp((gapW-bc.width[0])/(bc.width[1]-bc.width[0]||1),0,1);
+      const rawGapW=rr(bc.width[0],bc.width[1]);
+      const gapT=clamp((rawGapW-bc.width[0])/(bc.width[1]-bc.width[0]||1),0,1);
+      const gapW=rawGapW*BRIDGE_WIDTH_SCALE;
 
       const approach=rr(
         lerp(bc.approachLen[0]*0.78,bc.approachLen[0],gapT),
@@ -481,6 +511,7 @@ function ensureWorld(toX){
         a:takeoffX,b:takeoffX+gapW,btm:gapBottom,river:Math.random()<0.5,seed:Math.random(),
         w:gapW,t:gapT
       });
+      if(firstBridge) ensurePusherBeforeBridge(takeoffX);
       const downSlope1=rr(
         lerp(bc.settleSlope1[0]*0.66,bc.settleSlope1[0]*0.9,gapT),
         lerp(bc.settleSlope1[1]*0.78,bc.settleSlope1[1]*1.06,gapT)
@@ -653,7 +684,7 @@ function updatePlay(dt){
     const sl=slopeAt(player.x);
     const slopeAcc=sl*SLOPE_GRAVITY;
     let acc=(slopeAcc>=0?slopeAcc*ACCEL_SCALE:slopeAcc*DECEL_SCALE)-22*DECEL_SCALE;
-    if(input.brake) acc-=144*DECEL_SCALE;
+    if(input.brake) acc-=BRAKE_DECEL_GROUND*DECEL_SCALE;
     if(player.boost>0) acc+=385*ACCEL_SCALE;
     if(player.potholeSlow>0) acc-=240*DECEL_SCALE;
     const hardCap=MAX_SPEED*BOOST_MAX_MULT;
@@ -681,7 +712,7 @@ function updatePlay(dt){
   }else{
     const prevX=player.x,prevY=player.y;
     if(input.brake){
-      player.vx=Math.max(14,player.vx-112*DECEL_SCALE*dt);
+      player.vx=Math.max(8,player.vx-BRAKE_DECEL_AIR*DECEL_SCALE*dt);
       player.ang-=1.8*dt;
     }else player.ang+=0.75*dt;
     if(player.boost>0) player.vx+=96*ACCEL_SCALE*dt;
