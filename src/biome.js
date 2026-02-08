@@ -4,89 +4,112 @@
    randomizes per-cycle weather flags (cloudy, starsOn, snowOn) so you can get
    cloudy/clear day/sunset/night/winter variations.
 */
-(function(){
-function hexToRgb(h){const n=parseInt(h.slice(1),16);return[n>>16,(n>>8)&255,n&255]}
-function lC(a,b,t){return'rgb('+(a[0]+(b[0]-a[0])*t|0)+','+(a[1]+(b[1]-a[1])*t|0)+','+(a[2]+(b[2]-a[2])*t|0)+')'}
+function hexToRgb(h){const n=parseInt(h.slice(1),16);return[n>>16,(n>>8)&255,n&255];}
+function lC(a,b,t){return'rgb('+(a[0]+(b[0]-a[0])*t|0)+','+(a[1]+(b[1]-a[1])*t|0)+','+(a[2]+(b[2]-a[2])*t|0)+')';}
 function lN(a,b,t){return a+(b-a)*t}
-const _B=[
-  [500,'#4a90d9','#8ec5e8','#e8cfa0',1,0,0,'#8da4b8','#7a9478','#5e7a4e','#7a5232','#5e3a1e','#3a2010','#1e3a1a','#2a4a22','#2a4020',.13,0],
-  [400,'#2e3d6e','#d4726a','#f5b462',1,0,0,'#6b5e80','#7a5a58','#5c4838','#6e4a30','#55351c','#352010','#1a2e16','#243818','#22301a',.10,0],
-  [500,'#0a0e1a','#121832','#1a2040',0,1,1,'#1a2238','#16203a','#121830','#2a2030','#1e1620','#120e16','#0a140e','#0e1a10','#10180e',.06,0],
-  [500,'#8eaabe','#b8ccd8','#d8dde0',1,0,0,'#a8b8c8','#98aab8','#b0bcc8','#c8c0b8','#b0a8a0','#989088','#6a7a80','#8090a0','#606868',.18,1],
-  // Desert biome: uses cactus shapes instead of trees and supports sandstorms
-  // entries: len, sky1,sky2,sky3, sun,moon,stars, mtn1,mtn2,mtn3, gnd1,gnd2,gnd3, treeDark,treeLight, trunk, cloud, cactusFlag, sandProb
-  [500,'#f4d899','#f7e6c9','#fdeed8',1,0,0,'#e0c7a0','#d8b78a','#c9a87a','#ead7b0','#e0c28a','#c9a06a','#2f6032','#6fbf65','#b88a50',.08,1,0.22,0]
+
+// Define base place palettes
+const PLACES = [
+  {id:'temperate',name:'Temperate',
+    sky:['#6fb3ff','#9fd7ff','#f6e3c8'], sun:1, moon:0, stars:0,
+    mtn:['#6b8ea0','#5f7f88','#4a6168'],
+    gnd:['#6d8b56','#5c7a46','#4b6936'],
+    tree:['#174a19','#2a7a2a'], trunk:'#5a3d22', cloud:0.12, cactus:false
+  },
+  {id:'desert',name:'Desert',
+    sky:['#f4d899','#f7e6c9','#fdeed8'], sun:1, moon:0, stars:0,
+    mtn:['#e0c7a0','#d8b78a','#c9a87a'],
+    gnd:['#ead7b0','#e0c28a','#c9a06a'],
+    tree:['#2f6032','#6fbf65'], trunk:'#b88a50', cloud:0.06, cactus:true
+  },
+  {id:'arctic',name:'Arctic',
+    sky:['#d8efff','#bfe6ff','#eaf6ff'], sun:0.9, moon:0.1, stars:0,
+    mtn:['#cfe6f8','#b8d8ee','#9fbfdc'],
+    gnd:['#e8f0f6','#d8e8f0','#c8d8e8'],
+    tree:['#9fbfbf','#c0d0d0'], trunk:'#8899a0', cloud:0.08, cactus:false
+  }
 ];
-function _bObj(a){
-  return{
-    len:a[0],
-    sky:[a[1],a[2],a[3]],
-    sun:a[4],moon:a[5],stars:a[6],
-    mtn:[a[7],a[8],a[9]],
-    gnd:[a[10],a[11],a[12]],
-    tree:[a[13],a[14]],
-    trunk:a[15],
-    cloud:a[16],
-    cactus:!!a[17],
-    sandProb:(a[18]||0),
-    winter:!!a[19]
-  };
-}
-const BIOMES=_B.map(_bObj);
-const _BC=BIOMES.reduce((s,b)=>s+b.len,0);
 
-function seededRand(n){ // deterministic pseudo-random in [0,1)
-  return Math.abs(Math.sin(n)*43758.5453123)%1;
+// Time-of-day modifiers
+const TIMES = [
+  {id:'dawn', name:'Dawn', skyShift:['#ffdca8','#dff0ff','#f6e7cf'], sun:0.6, moon:0, stars:0, starsAllowed:false},
+  {id:'day', name:'Day', skyShift:null, sun:1, moon:0, stars:0, starsAllowed:false},
+  {id:'evening', name:'Evening', skyShift:['#ffb07a','#ffcda0','#f4d9b0'], sun:0.6, moon:0.1, stars:0, starsAllowed:false},
+  {id:'night', name:'Night', skyShift:['#021028','#0a1a3a','#101820'], sun:0, moon:1, stars:1, starsAllowed:true}
+];
+
+// Build combined BIOMES array (place x time)
+const BIOMES = [];
+const SEG_LEN = 480; // length of each (place,time) segment
+for(let p=0;p<PLACES.length;p++){
+  for(let t=0;t<TIMES.length;t++){
+    const P = PLACES[p], T = TIMES[t];
+    // mix sky: if T.skyShift present, prefer it; otherwise use P.sky
+    const sky = T.skyShift? [T.skyShift[0], T.skyShift[1], T.skyShift[2]] : [P.sky[0],P.sky[1],P.sky[2]];
+    const mtn = P.mtn.slice();
+    const gnd = P.gnd.slice();
+    const tree = P.tree.slice();
+    const trunk = P.trunk;
+    const cloudVal = P.cloud;
+    const name = P.name + ' — ' + T.name;
+    BIOMES.push({len:SEG_LEN, sky:sky, sun:T.sun, moon:T.moon, stars:T.stars, mtn:mtn, gnd:gnd, tree:tree, trunk:trunk, cloud:cloudVal, place:P.id, time:T.id, name:name, cactus:P.cactus});
+  }
 }
 
-// getCurBiome mirrors the old calcBiome but RETURNS the biome object
-// and attaches weather flags (cloudy/starsOn,snowOn). It deterministically
-// decides weather per-cycle so behavior is repeatable for the same dist.
+const _BC = BIOMES.reduce((s,b)=>s+b.len,0);
+
+function seededRand(n){ return Math.abs(Math.sin(n)*43758.5453123)%1; }
+
+// getCurBiome: returns blended biome and deterministic weather flags
 function getCurBiome(dist){
-  let d=((dist%_BC)+_BC)%_BC,acc=0;
+  let d = ((dist%_BC)+_BC)%_BC, acc=0;
   const cycleNum = Math.floor(dist/_BC);
   for(let i=0;i<BIOMES.length;i++){
-    const b=BIOMES[i],nx=BIOMES[(i+1)%BIOMES.length];
-    if(d<acc+b.len){
-      const ib=d-acc,fs=b.len-150;
-      let B=null;
-      if(ib<fs){
-        // stable
-        B=Object.assign({},b);
-      } else {
-        const t=(ib-fs)/150;
-        const sl=k=>b[k].map((c,j)=>lC(hexToRgb(c),hexToRgb(nx[k][j]),t));
-        B={sky:sl('sky'),sun:lN(b.sun,nx.sun,t),moon:lN(b.moon,nx.moon,t),stars:lN(b.stars,nx.stars,t),
-          mtn:sl('mtn'),gnd:sl('gnd'),tree:sl('tree'),trunk:lC(hexToRgb(b.trunk),hexToRgb(nx.trunk),t),cloud:lN(b.cloud,nx.cloud,t)};
+    const b = BIOMES[i];
+    const nx = BIOMES[(i+1)%BIOMES.length];
+    if(d < acc + b.len){
+      const ib = d-acc, fs = b.len - 120; // blend last 120 units
+      let outB = null;
+      if(ib < fs){ outB = Object.assign({}, b); }
+      else {
+        const t = (ib - fs)/120;
+        // blend colors
+        const blendArr = (a1,a2) => a1.map((c,j)=>{
+          const c1 = hexToRgb(c); const c2 = hexToRgb(a2[j]); return lC(c1,c2,t);
+        });
+        outB = {
+          len: b.len,
+          sky: blendArr(b.sky, nx.sky),
+          sun: lN(b.sun, nx.sun, t), moon: lN(b.moon, nx.moon, t), stars: lN(b.stars, nx.stars, t),
+          mtn: blendArr(b.mtn, nx.mtn), gnd: blendArr(b.gnd, nx.gnd), tree: blendArr(b.tree, nx.tree),
+          trunk: lC(hexToRgb(b.trunk), hexToRgb(nx.trunk), t), cloud: lN(b.cloud, nx.cloud, t), place: b.place, time: b.time, name: b.name, cactus: b.cactus
+        };
       }
-      // deterministic weather: use cycleNum & biome index as seed
-      const seedBase = cycleNum*1013 + i*7919;
-  const r1 = seededRand(seedBase + 13);
-  const r2 = seededRand(seedBase + 29);
-  const r3 = seededRand(seedBase + 47);
-  const r4 = seededRand(seedBase + 61);
-      // cloud probability driven by b.cloud but scaled so small b.cloud still sometimes clouds
-      const cloudProb = Math.min(0.9, b.cloud*3.0);
-      const cloudy = r1 < cloudProb;
-    const starsOn = (b.stars>0.01) && (r2 < 0.7); // sometimes visible
-    // snow only for biomes flagged as winter
-  const snowOn = (b.winter) && (r3 < 0.5);
-  // sandstorm for desert-like biomes (b.cactus indicates desert here)
-  const sandOn = b.cactus && (r4 < (b.sandProb||0));
-      // apply flags into a copy of B
-      const out = Object.assign({}, B);
-      out._biomeIndex = i;
-      out._cycle = cycleNum;
-      out.cloud = cloudy? (out.cloud||b.cloud) : 0; // keep numeric cloud value for existing drawing code
-      out.stars = starsOn? (out.stars||b.stars) : 0;
-  out.weather = {cloudy:cloudy,starsOn:starsOn,snowOn:snowOn,sandstormOn:sandOn};
-  out.cactus = !!b.cactus;
+      // deterministic weather picks per-cycle & biome
+      const seedBase = cycleNum*1009 + i*7919;
+      const rCloud = seededRand(seedBase + 11);
+      const rRain = seededRand(seedBase + 23);
+      const rStars = seededRand(seedBase + 37);
+      const rSand = seededRand(seedBase + 53);
+      const rSnow = seededRand(seedBase + 67);
+      // cloud probability influenced by cloud numeric
+      const cloudProb = Math.min(0.95, (outB.cloud||b.cloud)*2.5);
+      const cloudy = rCloud < cloudProb;
+      const rain = rRain < 0.08; // small chance any biome/time can have rain
+      const starsOn = ( (b.time==='night' || outB.time==='night') && rStars < 0.85 );
+      const sandOn = (b.place==='desert') && (rSand < 0.22);
+      const snowOn = (b.place==='arctic') && (rSnow < 0.18);
+
+      const out = Object.assign({}, outB);
+      out._biomeIndex = i; out._cycle = cycleNum;
+      out.cloud = cloudy ? (out.cloud||b.cloud) : 0;
+      out.stars = starsOn ? (out.stars||b.stars) : 0;
+      out.weather = {cloudy:cloudy, rain:rain, starsOn:starsOn, sandstormOn:sandOn, snowOn:snowOn};
       return out;
     }
-    acc+=b.len;
+    acc += b.len;
   }
   return BIOMES[0];
 }
 
-window.BIOME_MODULE = {BIOMES, _BC, getCurBiome};
-})();
+window.BIOME_MODULE = {PLACES, TIMES, BIOMES, _BC, getCurBiome};

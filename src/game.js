@@ -111,6 +111,8 @@ let debugKeySeqLast = 0; // ms
 const DEBUG_KEY_WINDOW = 800;
 let debugForceBiome = null; // null = normal cycling, or index to force
 let debugInfiniteRun = false;
+let debugForcePlace = null; // index into BIOME_MODULE.PLACES or null
+let debugForceTime = null; // index into BIOME_MODULE.TIMES or null
 // readable biome names (order should match BIOME_MODULE.BIOMES)
 const BIOME_NAMES = ['Temperate','Autumn','Night','Winter','Desert'];
 // overlay hit regions computed during drawHud so pointerDown can reuse them
@@ -1345,7 +1347,7 @@ function drawHud(){
       for(let i=0;i<lines.length;i++){
         g.fillText(lines[i], textX, dy + dbgPad + (i+0.9)*lh - (lh*0.12));
       }
-      // draw buttons: prev, next, clear, infinite
+      // draw buttons: prev, next, clear, infinite (main controls)
       const buttonsX = textX + bw + 8;
       const labels = ['<','>','0','∞'];
       g.font='600 '+Math.round(fs2*1.05)+'px system-ui,sans-serif';
@@ -1357,8 +1359,37 @@ function drawHud(){
         g.globalAlpha = 1; g.fillStyle = '#000'; g.textAlign='center'; g.fillText(labels[i], bxBtn + bs*0.5, byBtn + bs*0.72);
         buttons.push({x:bxBtn,y:byBtn,w:bs,h:bs,action:i});
       }
-      // store overlay bounds and buttons for pointer hit testing
-      debugOverlayRegions = {box:{x:dx-6,y:dy-6,w:boxW+12,h:boxH+12}, buttons:buttons};
+      // place/time controls: left, label, right for each
+      const ctrlY = dy + dbgPad + boxH + 8;
+      const ctrlW = Math.round(Math.min(220, Math.max(140, bw*0.48)));
+      const ctrlH = Math.round(lh*0.95);
+      const gap = 8;
+      const placeX = textX;
+      const timeX = textX + ctrlW + gap + 8;
+      // compute current place/time display names
+      const places = (window.BIOME_MODULE && window.BIOME_MODULE.PLACES) || [];
+      const timesArr = (window.BIOME_MODULE && window.BIOME_MODULE.TIMES) || [];
+      const curPlaceName = (curBiome && curBiome.place) ? (places.find(p=>p.id===curBiome.place)||{}).name || curBiome.place : (places[0]&&places[0].name)||'Place';
+      const curTimeName = (curBiome && curBiome.time) ? (timesArr.find(t=>t.id===curBiome.time)||{}).name || curBiome.time : (timesArr[0]&&timesArr[0].name)||'Time';
+      // draw place control
+      g.globalAlpha=0.18; g.fillStyle='#fff'; roundRect(placeX, ctrlY, ctrlW, ctrlH,6); g.fill();
+      g.globalAlpha=1; g.fillStyle='#000'; g.textAlign='left'; g.fillText('Place: '+curPlaceName, placeX+8, ctrlY+ctrlH*0.72);
+      // draw time control
+      g.globalAlpha=0.18; g.fillStyle='#fff'; roundRect(timeX, ctrlY, ctrlW, ctrlH,6); g.fill();
+      g.globalAlpha=1; g.fillStyle='#000'; g.textAlign='left'; g.fillText('Time: '+curTimeName, timeX+8, ctrlY+ctrlH*0.72);
+      // place/time small arrows (left/right) hitboxes
+      const arrowW = Math.round(ctrlH*0.8);
+      const placePrev = {x:placeX+ctrlW- (arrowW*2 + 4), y:ctrlY + Math.round((ctrlH-arrowW)/2), w:arrowW, h:arrowW, action:'placePrev'};
+      const placeNext = {x:placeX+ctrlW- (arrowW), y:ctrlY + Math.round((ctrlH-arrowW)/2), w:arrowW, h:arrowW, action:'placeNext'};
+      const timePrev = {x:timeX+ctrlW- (arrowW*2 + 4), y:ctrlY + Math.round((ctrlH-arrowW)/2), w:arrowW, h:arrowW, action:'timePrev'};
+      const timeNext = {x:timeX+ctrlW- (arrowW), y:ctrlY + Math.round((ctrlH-arrowW)/2), w:arrowW, h:arrowW, action:'timeNext'};
+      // draw arrows
+      g.globalAlpha=0.22; g.fillStyle='#fff'; roundRect(placePrev.x,placePrev.y,placePrev.w,placePrev.h,4); roundRect(placeNext.x,placeNext.y,placeNext.w,placeNext.h,4); roundRect(timePrev.x,timePrev.y,timePrev.w,timePrev.h,4); roundRect(timeNext.x,timeNext.y,timeNext.w,timeNext.h,4); g.fill();
+      g.globalAlpha=1; g.fillStyle='#000'; g.textAlign='center'; g.fillText('<', placePrev.x+placePrev.w*0.5, placePrev.y+placePrev.h*0.76); g.fillText('>', placeNext.x+placeNext.w*0.5, placeNext.y+placeNext.h*0.76);
+      g.fillText('<', timePrev.x+timePrev.w*0.5, timePrev.y+timePrev.h*0.76); g.fillText('>', timeNext.x+timeNext.w*0.5, timeNext.y+timeNext.h*0.76);
+
+      // store overlay bounds, buttons and controls for pointer hit testing
+      debugOverlayRegions = {box:{x:dx-6,y:dy-6,w:boxW+12,h:boxH+12 + ctrlH + 12}, buttons:buttons, controls:[placePrev,placeNext,timePrev,timeNext], controlLabels:[{x:placeX,y:ctrlY,w:ctrlW,h:ctrlH,kind:'place'},{x:timeX,y:ctrlY,w:ctrlW,h:ctrlH,kind:'time'}]};
     }
     g.restore();
   }catch(e){/* non-fatal debug overlay error shouldn't break game */}
@@ -1718,10 +1749,23 @@ function tutBox(text,hb){
 }
 function render(){
   const dist=Math.max(0,Math.floor((player.x-startX)/10));
-  // Allow forcing a biome for debugging: pick a dist inside the chosen biome
+  // Allow forcing a biome/place/time for debugging: pick a dist inside the chosen biome
   if(debugForceBiome!=null && window.BIOME_MODULE && window.BIOME_MODULE.BIOMES){
     let acc=0;
     for(let i=0;i<debugForceBiome;i++) acc += (window.BIOME_MODULE.BIOMES[i] && window.BIOME_MODULE.BIOMES[i].len) || 0;
+    const fakeDist = acc + 10;
+    curBiome = (window.BIOME_MODULE && window.BIOME_MODULE.getCurBiome)? window.BIOME_MODULE.getCurBiome(fakeDist) : curBiome;
+  } else if((debugForcePlace!=null || debugForceTime!=null) && window.BIOME_MODULE && window.BIOME_MODULE.PLACES && window.BIOME_MODULE.TIMES){
+    const places = window.BIOME_MODULE.PLACES;
+    const times = window.BIOME_MODULE.TIMES;
+    // derive current place/time indices if not forced
+    const curPlaceIdx = (curBiome && curBiome.place)? places.findIndex(p=>p.id===curBiome.place) : 0;
+    const curTimeIdx = (curBiome && curBiome.time)? times.findIndex(t=>t.id===curBiome.time) : 0;
+    const pIdx = debugForcePlace!=null? clamp(debugForcePlace,0,places.length-1) : (curPlaceIdx<0?0:curPlaceIdx);
+    const tIdx = debugForceTime!=null? clamp(debugForceTime,0,times.length-1) : (curTimeIdx<0?0:curTimeIdx);
+    const biIndex = pIdx * times.length + tIdx;
+    let acc = 0;
+    for(let i=0;i<biIndex;i++) acc += (window.BIOME_MODULE.BIOMES[i] && window.BIOME_MODULE.BIOMES[i].len) || 0;
     const fakeDist = acc + 10;
     curBiome = (window.BIOME_MODULE && window.BIOME_MODULE.getCurBiome)? window.BIOME_MODULE.getCurBiome(fakeDist) : curBiome;
   } else {
@@ -2230,6 +2274,45 @@ function pointerDown(e){
             debugInfiniteRun = !debugInfiniteRun; queueCenterCue('INFINITE: '+(debugInfiniteRun?'ON':'OFF'));
           }
           e.preventDefault(); return;
+        }
+      }
+      // check place/time controls
+      for(const c of (debugOverlayRegions.controls||[])){
+        if(px>=c.x && px<=c.x+c.w && py>=c.y && py<=c.y+c.h){
+          const places = (window.BIOME_MODULE && window.BIOME_MODULE.PLACES) || [];
+          const times = (window.BIOME_MODULE && window.BIOME_MODULE.TIMES) || [];
+          if(c.action==='placePrev' || c.action==='placeNext'){
+            if(debugForcePlace==null){ // initialize to current place
+              debugForcePlace = Math.max(0, (curBiome&&curBiome.place)? (places.findIndex(p=>p.id===curBiome.place)) : 0);
+            }
+            if(c.action==='placePrev') debugForcePlace = (debugForcePlace - 1 + places.length) % places.length;
+            else debugForcePlace = (debugForcePlace + 1) % places.length;
+            queueCenterCue('PLACE: '+(places[debugForcePlace]?places[debugForcePlace].name:debugForcePlace));
+            e.preventDefault(); return;
+          }
+          if(c.action==='timePrev' || c.action==='timeNext'){
+            if(debugForceTime==null){ // initialize to current time
+              debugForceTime = Math.max(0, (curBiome&&curBiome.time)? (times.findIndex(t=>t.id===curBiome.time)) : 0);
+            }
+            if(c.action==='timePrev') debugForceTime = (debugForceTime - 1 + times.length) % times.length;
+            else debugForceTime = (debugForceTime + 1) % times.length;
+            queueCenterCue('TIME: '+(times[debugForceTime]?times[debugForceTime].name:debugForceTime));
+            e.preventDefault(); return;
+          }
+        }
+      }
+      // check taps on the place/time label boxes to clear forcing
+      for(const lbl of (debugOverlayRegions.controlLabels||[])){
+        if(px>=lbl.x && px<=lbl.x+lbl.w && py>=lbl.y && py<=lbl.y+lbl.h){
+          if(lbl.kind==='place'){
+            if(debugForcePlace!=null){ debugForcePlace=null; queueCenterCue('PLACE: OFF'); }
+            else { const places=(window.BIOME_MODULE&&window.BIOME_MODULE.PLACES)||[]; debugForcePlace = Math.max(0,(curBiome&&curBiome.place)?places.findIndex(p=>p.id===curBiome.place):0); queueCenterCue('PLACE: '+(places[debugForcePlace]?places[debugForcePlace].name:debugForcePlace)); }
+            e.preventDefault(); return;
+          }else if(lbl.kind==='time'){
+            if(debugForceTime!=null){ debugForceTime=null; queueCenterCue('TIME: OFF'); }
+            else { const times=(window.BIOME_MODULE&&window.BIOME_MODULE.TIMES)||[]; debugForceTime = Math.max(0,(curBiome&&curBiome.time)?times.findIndex(t=>t.id===curBiome.time):0); queueCenterCue('TIME: '+(times[debugForceTime]?times[debugForceTime].name:debugForceTime)); }
+            e.preventDefault(); return;
+          }
         }
       }
       // clicked inside overlay but not on a button: consume
