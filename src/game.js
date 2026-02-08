@@ -113,6 +113,7 @@ let debugForceBiome = null; // null = normal cycling, or index to force
 let debugInfiniteRun = false;
 let debugForcePlace = null; // index into BIOME_MODULE.PLACES or null
 let debugForceTime = null; // index into BIOME_MODULE.TIMES or null
+// evening variant debug control removed
 // readable biome names (order should match BIOME_MODULE.BIOMES)
 const BIOME_NAMES = ['Temperate','Autumn','Night','Winter','Desert'];
 // overlay hit regions computed during drawHud so pointerDown can reuse them
@@ -1377,19 +1378,23 @@ function drawHud(){
       // draw time control
       g.globalAlpha=0.18; g.fillStyle='#fff'; roundRect(timeX, ctrlY, ctrlW, ctrlH,6); g.fill();
       g.globalAlpha=1; g.fillStyle='#000'; g.textAlign='left'; g.fillText('Time: '+curTimeName, timeX+8, ctrlY+ctrlH*0.72);
-      // place/time small arrows (left/right) hitboxes
+  // place/time small arrows (left/right) hitboxes
       const arrowW = Math.round(ctrlH*0.8);
       const placePrev = {x:placeX+ctrlW- (arrowW*2 + 4), y:ctrlY + Math.round((ctrlH-arrowW)/2), w:arrowW, h:arrowW, action:'placePrev'};
       const placeNext = {x:placeX+ctrlW- (arrowW), y:ctrlY + Math.round((ctrlH-arrowW)/2), w:arrowW, h:arrowW, action:'placeNext'};
       const timePrev = {x:timeX+ctrlW- (arrowW*2 + 4), y:ctrlY + Math.round((ctrlH-arrowW)/2), w:arrowW, h:arrowW, action:'timePrev'};
       const timeNext = {x:timeX+ctrlW- (arrowW), y:ctrlY + Math.round((ctrlH-arrowW)/2), w:arrowW, h:arrowW, action:'timeNext'};
-      // draw arrows
+
+      // draw arrows for place/time
       g.globalAlpha=0.22; g.fillStyle='#fff'; roundRect(placePrev.x,placePrev.y,placePrev.w,placePrev.h,4); roundRect(placeNext.x,placeNext.y,placeNext.w,placeNext.h,4); roundRect(timePrev.x,timePrev.y,timePrev.w,timePrev.h,4); roundRect(timeNext.x,timeNext.y,timeNext.w,timeNext.h,4); g.fill();
       g.globalAlpha=1; g.fillStyle='#000'; g.textAlign='center'; g.fillText('<', placePrev.x+placePrev.w*0.5, placePrev.y+placePrev.h*0.76); g.fillText('>', placeNext.x+placeNext.w*0.5, placeNext.y+placeNext.h*0.76);
       g.fillText('<', timePrev.x+timePrev.w*0.5, timePrev.y+timePrev.h*0.76); g.fillText('>', timeNext.x+timeNext.w*0.5, timeNext.y+timeNext.h*0.76);
 
       // store overlay bounds, buttons and controls for pointer hit testing
-      debugOverlayRegions = {box:{x:dx-6,y:dy-6,w:boxW+12,h:boxH+12 + ctrlH + 12}, buttons:buttons, controls:[placePrev,placeNext,timePrev,timeNext], controlLabels:[{x:placeX,y:ctrlY,w:ctrlW,h:ctrlH,kind:'place'},{x:timeX,y:ctrlY,w:ctrlW,h:ctrlH,kind:'time'}]};
+  const controlsArr = [placePrev,placeNext,timePrev,timeNext];
+      if(evLabel) controlsArr.push(evPrev, evNext);
+      const labelsArr = [{x:placeX,y:ctrlY,w:ctrlW,h:ctrlH,kind:'place'},{x:timeX,y:ctrlY,w:ctrlW,h:ctrlH,kind:'time'}];
+      debugOverlayRegions = {box:{x:dx-6,y:dy-6,w:boxW+12,h:boxH+12 + ctrlH + 12}, buttons:buttons, controls:controlsArr, controlLabels:labelsArr};
     }
     g.restore();
   }catch(e){/* non-fatal debug overlay error shouldn't break game */}
@@ -1585,7 +1590,8 @@ function drawButton(b,key){
 }
 function drawOneTree(tx,baseY,kind,sc,dark){
   g.globalAlpha=dark?0.55:0.7;
-  const B=curBiome;
+    const B=curBiome;
+    // Note: evening-variant overrides removed — BIOME_MODULE no longer exposes EVENING_VARIANTS
   const col=dark?B.tree[0]:B.tree[1];
   const col2=dark?B.tree[1]:B.tree[0];
   const h=(kind===0?110:kind===1?130:115)*sc;
@@ -2299,6 +2305,7 @@ function pointerDown(e){
             queueCenterCue('TIME: '+(times[debugForceTime]?times[debugForceTime].name:debugForceTime));
             e.preventDefault(); return;
           }
+          // evening variant handlers removed
         }
       }
       // check taps on the place/time label boxes to clear forcing

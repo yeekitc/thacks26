@@ -11,19 +11,60 @@ function lN(a,b,t){return a+(b-a)*t}
 // Define base place palettes
 const PLACES = [
   {id:'temperate',name:'Temperate',
-    sky:['#6fb3ff','#9fd7ff','#f6e3c8'], sun:1, moon:0, stars:0,
+    // per-time skies: dawn, day, evening, night
+    skyTimes: {
+      dawn: ['#ffdca8','#dff0ff','#f6e7cf'],
+      day:  ['#4a90d9','#8ec5e8','#e8cfa0'],
+      evening: ['#2e3d6e','#d4726a','#f5b462'],
+      night: ['#0a0e1a','#121832','#1a2040']
+    },
+    sun:1, moon:0, stars:0,
+    // per-time mountain, ground, tree, trunk and cloud values (from legacy rows)
+    mtnTimes: {
+      day: ['#8da4b8','#7a9478','#5e7a4e'],
+      evening: ['#6b5e80','#7a5a58','#5c4838'],
+      night: ['#1a2238','#16203a','#121830']
+    },
+    gndTimes: {
+      day: ['#7a5232','#5e3a1e','#3a2010'],
+      evening: ['#6e4a30','#55351c','#352010'],
+      night: ['#2a2030','#1e1620','#120e16']
+    },
+    treeTimes: {
+      day: ['#1e3a1a','#2a4a22'],
+      evening: ['#1a2e16','#243818'],
+      night: ['#0a140e','#0e1a10']
+    },
+    trunkTimes: {
+      day: '#2a4020',
+      evening: '#22301a',
+      night: '#10180e'
+    },
+    cloudTimes: { day: 0.13, evening: 0.10, night: 0.06 },
     mtn:['#6b8ea0','#5f7f88','#4a6168'],
     gnd:['#6d8b56','#5c7a46','#4b6936'],
     tree:['#174a19','#2a7a2a'], trunk:'#5a3d22', cloud:0.12, cactus:false
   },
   {id:'desert',name:'Desert',
-    sky:['#f4d899','#f7e6c9','#fdeed8'], sun:1, moon:0, stars:0,
+    skyTimes: {
+      dawn: ['#fde6b8','#fbe8c8','#faeed8'],
+      day:  ['#f4d899','#f7e6c9','#fdeed8'],
+      evening: ['#8b5a2e','#de8b5a','#f6d7a0'],
+      night: ['#17120e','#241b14','#0f0b08']
+    },
+    sun:1, moon:0, stars:0,
     mtn:['#e0c7a0','#d8b78a','#c9a87a'],
     gnd:['#ead7b0','#e0c28a','#c9a06a'],
     tree:['#2f6032','#6fbf65'], trunk:'#b88a50', cloud:0.06, cactus:true
   },
   {id:'arctic',name:'Arctic',
-    sky:['#d8efff','#bfe6ff','#eaf6ff'], sun:0.9, moon:0.1, stars:0,
+    skyTimes: {
+      dawn: ['#e6f7ff','#dbeeff','#eaf6ff'],
+      day:  ['#d8efff','#bfe6ff','#eaf6ff'],
+      evening: ['#3b4f6e','#92b0d0','#dbefff'],
+      night: ['#041026','#0b1f33','#0f2436']
+    },
+    sun:0.9, moon:0.1, stars:0,
     mtn:['#cfe6f8','#b8d8ee','#9fbfdc'],
     gnd:['#e8f0f6','#d8e8f0','#c8d8e8'],
     tree:['#9fbfbf','#c0d0d0'], trunk:'#8899a0', cloud:0.08, cactus:false
@@ -34,9 +75,8 @@ const PLACES = [
 const TIMES = [
   {id:'dawn', name:'Dawn', skyShift:['#ffdca8','#dff0ff','#f6e7cf'], sun:0.6, moon:0, stars:0, starsAllowed:false},
   {id:'day', name:'Day', skyShift:null, sun:1, moon:0, stars:0, starsAllowed:false},
-  // richer sunset colors restored
-  {id:'evening', name:'Evening', skyShift:['#ff7b5a','#ffad80','#ffddbb'], sun:0.6, moon:0.1, stars:0, starsAllowed:false},
-  {id:'night', name:'Night', skyShift:['#021028','#0a1a3a','#101820'], sun:0, moon:1, stars:1, starsAllowed:true}
+  {id:'evening', name:'Evening', skyShift:['#2e3d6e','#d4726a','#f5b462'], sun:0.6, moon:0.1, stars:0, starsAllowed:false},
+  {id:'night', name:'Night', skyShift:['#0a0e1a','#121832','#1a2040'], sun:0, moon:1, stars:1, starsAllowed:true}
 ];
 
 // Build combined BIOMES array (place x time)
@@ -45,13 +85,14 @@ const SEG_LEN = 480; // length of each (place,time) segment
 for(let p=0;p<PLACES.length;p++){
   for(let t=0;t<TIMES.length;t++){
     const P = PLACES[p], T = TIMES[t];
-    // mix sky: if T.skyShift present, prefer it; otherwise use P.sky
-    const sky = T.skyShift? [T.skyShift[0], T.skyShift[1], T.skyShift[2]] : [P.sky[0],P.sky[1],P.sky[2]];
-    const mtn = P.mtn.slice();
-    const gnd = P.gnd.slice();
-    const tree = P.tree.slice();
-    const trunk = P.trunk;
-    const cloudVal = P.cloud;
+  // choose sky: prefer place-specific per-time palette if present; fall back to T.skyShift or P.skyTimes.day
+  const sky = (P.skyTimes && P.skyTimes[T.id]) ? [P.skyTimes[T.id][0], P.skyTimes[T.id][1], P.skyTimes[T.id][2]]
+        : (T.skyShift ? [T.skyShift[0], T.skyShift[1], T.skyShift[2]] : [P.skyTimes.day[0],P.skyTimes.day[1],P.skyTimes.day[2]]);
+  const mtn = (P.mtnTimes && P.mtnTimes[T.id]) ? P.mtnTimes[T.id].slice() : P.mtn.slice();
+  const gnd = (P.gndTimes && P.gndTimes[T.id]) ? P.gndTimes[T.id].slice() : P.gnd.slice();
+  const tree = (P.treeTimes && P.treeTimes[T.id]) ? P.treeTimes[T.id].slice() : P.tree.slice();
+  const trunk = (P.trunkTimes && P.trunkTimes[T.id]) ? P.trunkTimes[T.id] : P.trunk;
+  const cloudVal = (P.cloudTimes && P.cloudTimes[T.id] != null) ? P.cloudTimes[T.id] : P.cloud;
     const name = P.name + ' — ' + T.name;
     BIOMES.push({len:SEG_LEN, sky:sky, sun:T.sun, moon:T.moon, stars:T.stars, mtn:mtn, gnd:gnd, tree:tree, trunk:trunk, cloud:cloudVal, place:P.id, time:T.id, name:name, cactus:P.cactus});
   }
@@ -114,3 +155,6 @@ function getCurBiome(dist){
 }
 
 window.BIOME_MODULE = {PLACES, TIMES, BIOMES, _BC, getCurBiome};
+
+
+
