@@ -51,3 +51,6 @@ __pycache__/
 server/leaderboard.db.bak*
 server/*.db.bak*
 server/*.bak
+
+# Keep a dedicated backups folder for DB backups
+server/backups/
