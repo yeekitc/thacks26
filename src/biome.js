@@ -34,7 +34,8 @@ const PLACES = [
 const TIMES = [
   {id:'dawn', name:'Dawn', skyShift:['#ffdca8','#dff0ff','#f6e7cf'], sun:0.6, moon:0, stars:0, starsAllowed:false},
   {id:'day', name:'Day', skyShift:null, sun:1, moon:0, stars:0, starsAllowed:false},
-  {id:'evening', name:'Evening', skyShift:['#ffb07a','#ffcda0','#f4d9b0'], sun:0.6, moon:0.1, stars:0, starsAllowed:false},
+  // richer sunset colors restored
+  {id:'evening', name:'Evening', skyShift:['#ff7b5a','#ffad80','#ffddbb'], sun:0.6, moon:0.1, stars:0, starsAllowed:false},
   {id:'night', name:'Night', skyShift:['#021028','#0a1a3a','#101820'], sun:0, moon:1, stars:1, starsAllowed:true}
 ];
 
