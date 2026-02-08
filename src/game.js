@@ -85,7 +85,9 @@ function calcBiome(dist){
     acc+=b.len;
   }
 }
-const API=location.port==='8000'?'http://localhost:3001':'';
+// Read API URL from a <meta name="API"> tag when present, otherwise
+// fall back to the supplied Cloudflare tunnel URL for local testing.
+const API=(document.querySelector('meta[name="API"]')||{content:'https://points-chosen-ted-united.trycloudflare.com'}).content;
 let wifiOn=0,lbData=[],deathData=[],deathFetched=0;
 let nameInput='',nameConfirmed=0,nameFocused=0,scoreSubmitted=0,lbScroll=0,nameBoxRect=null;
 function fetchLB(){
