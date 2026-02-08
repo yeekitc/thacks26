@@ -8,7 +8,11 @@ SRC_DIR="${SCRIPT_DIR}/src"
 BUILD_DIR="${SCRIPT_DIR}/build"
 INDEX_SRC="${SRC_DIR}/index.html"
 CSS_SRC="${SRC_DIR}/style.css"
-JS_SRC="${SRC_DIR}/game.js"
+# We'll produce a combined JS bundle that includes biome.js first, then game.js.
+BIOME_SRC="${SRC_DIR}/biome.js"
+GAME_SRC="${SRC_DIR}/game.js"
+JS_SRC_LIST=("$BIOME_SRC" "$GAME_SRC")
+JS_TMP="${BUILD_DIR}/game.build.tmp.js"
 INDEX_OUT="${BUILD_DIR}/index.html"
 JS_TMP="${BUILD_DIR}/game.build.tmp.js"
 TAR_FILE="${BUILD_DIR}/game.tar"
@@ -36,7 +40,7 @@ if [ "$HAS_BROTLI" -eq 0 ] && [ "$HAS_ZSTD" -eq 0 ] && [ "$HAS_GZIP" -eq 0 ]; th
     exit 1
 fi
 
-for file in "$INDEX_SRC" "$CSS_SRC" "$JS_SRC"; do
+for file in "$INDEX_SRC" "$CSS_SRC" "$BIOME_SRC" "$GAME_SRC"; do
     if [ ! -f "$file" ]; then
         echo "Error: required source file missing: $file"
         exit 1
@@ -51,17 +55,21 @@ rm -f "$INDEX_OUT" "$JS_TMP" "$TAR_FILE" \
     "${BUILD_DIR}/game.tar.br" "${BUILD_DIR}/game.tar.zst" "${BUILD_DIR}/game.tar.gz"
 
 if command -v npx >/dev/null 2>&1; then
-    npx --yes terser "$JS_SRC" --compress passes=5,drop_console=true,unsafe_math=true,unsafe=true,pure_getters=true,keep_fargs=false,unsafe_comps=true,unsafe_Function=true,unsafe_methods=true,unsafe_proto=true,unsafe_regexp=true,unsafe_undefined=true --mangle toplevel=true --output "$JS_TMP"
+    # concatenate biome + game and pipe into terser via stdin (keeps order)
+    cat "${JS_SRC_LIST[@]}" | npx --yes terser --compress passes=5,drop_console=true,unsafe_math=true,unsafe=true,pure_getters=true,keep_fargs=false,unsafe_comps=true,unsafe_Function=true,unsafe_methods=true,unsafe_proto=true,unsafe_regexp=true,unsafe_undefined=true --mangle toplevel=true --output "$JS_TMP"
 elif [ "$HAS_BUN" -eq 1 ]; then
-    bun build "$JS_SRC" --minify --target=browser --outfile "$JS_TMP" >/dev/null
+    # bun build accepts multiple inputs but to be safe concat first
+    cat "${JS_SRC_LIST[@]}" > "$JS_TMP" && bun build "$JS_TMP" --minify --target=browser --outfile "$JS_TMP" >/dev/null || true
 else
-    cp "$JS_SRC" "$JS_TMP"
+    # fallback: concatenate without minification
+    cat "${JS_SRC_LIST[@]}" > "$JS_TMP"
 fi
 
 {
-    printf '<body style=margin:0;overflow:hidden;background:#000><canvas id=c></canvas><script>'
+    # Emit a minimal but well-formed HTML document so browsers can detect UTF-8
+    printf '<!doctype html>\n<html>\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">\n</head>\n<body style=margin:0;overflow:hidden;background:#000><canvas id=c></canvas><script>'
     cat "$JS_TMP"
-    printf '</script>'
+    printf '</script></body>\n</html>\n'
 } > "$INDEX_OUT"
 
 rm -f "$JS_TMP"

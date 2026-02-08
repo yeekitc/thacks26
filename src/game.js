@@ -57,34 +57,15 @@ const input={call:0,act:0};
 function hexToRgb(h){const n=parseInt(h.slice(1),16);return[n>>16,(n>>8)&255,n&255]}
 function lC(a,b,t){return'rgb('+(a[0]+(b[0]-a[0])*t|0)+','+(a[1]+(b[1]-a[1])*t|0)+','+(a[2]+(b[2]-a[2])*t|0)+')'}
 function lN(a,b,t){return a+(b-a)*t}
-const _B=[
-[500,'#4a90d9','#8ec5e8','#e8cfa0',1,0,0,'#8da4b8','#7a9478','#5e7a4e','#7a5232','#5e3a1e','#3a2010','#1e3a1a','#2a4a22','#2a4020',.13],
-[400,'#2e3d6e','#d4726a','#f5b462',1,0,0,'#6b5e80','#7a5a58','#5c4838','#6e4a30','#55351c','#352010','#1a2e16','#243818','#22301a',.10],
-[500,'#0a0e1a','#121832','#1a2040',0,1,1,'#1a2238','#16203a','#121830','#2a2030','#1e1620','#120e16','#0a140e','#0e1a10','#10180e',.06],
-[500,'#8eaabe','#b8ccd8','#d8dde0',1,0,0,'#a8b8c8','#98aab8','#b0bcc8','#c8c0b8','#b0a8a0','#989088','#6a7a80','#8090a0','#606868',.18],
-];
-function _bObj(a){return{len:a[0],sky:[a[1],a[2],a[3]],sun:a[4],moon:a[5],stars:a[6],mtn:[a[7],a[8],a[9]],gnd:[a[10],a[11],a[12]],tree:[a[13],a[14]],trunk:a[15],cloud:a[16]}}
-const BIOMES=_B.map(_bObj);
-const _BC=BIOMES.reduce((s,b)=>s+b.len,0);
-let curBiome=BIOMES[0],lastDist=-999;
-function calcBiome(dist){
-  if(Math.abs(dist-lastDist)<5) return;
-  lastDist=dist;
-  let d=((dist%_BC)+_BC)%_BC,acc=0;
-  for(let i=0;i<BIOMES.length;i++){
-    const b=BIOMES[i],nx=BIOMES[(i+1)%BIOMES.length];
-    if(d<acc+b.len){
-      const ib=d-acc,fs=b.len-150;
-      if(ib<fs){curBiome=b;return;}
-      const t=(ib-fs)/150;
-      const sl=k=>b[k].map((c,j)=>lC(hexToRgb(c),hexToRgb(nx[k][j]),t));
-      curBiome={sky:sl('sky'),sun:lN(b.sun,nx.sun,t),moon:lN(b.moon,nx.moon,t),stars:lN(b.stars,nx.stars,t),
-        mtn:sl('mtn'),gnd:sl('gnd'),tree:sl('tree'),trunk:lC(hexToRgb(b.trunk),hexToRgb(nx.trunk),t),cloud:lN(b.cloud,nx.cloud,t)};
-      return;
-    }
-    acc+=b.len;
-  }
-}
+// Biome data and selection moved to src/biome.js (BIOME_MODULE)
+// Fallbacks in case the module isn't loaded (keeps game runnable).
+const BIOME_MODULE = window.BIOME_MODULE || (function(){
+  console.warn('BIOME_MODULE not found; using minimal fallback');
+  // minimal fallback: a single neutral biome
+  const fb = {len:1000,sky:['#333','#555','#777'],sun:1,moon:0,stars:0,mtn:['#666','#555','#444'],gnd:['#372','#241','#120'],tree:['#203','#102'],trunk:'#331',cloud:0.1};
+  return {BIOMES:[fb],_BC:fb.len,getCurBiome:()=>fb};
+})();
+let curBiome = BIOME_MODULE.getCurBiome(0);
 // Read API URL from a <meta name="API"> tag when present, otherwise
 // fall back to the supplied Cloudflare tunnel URL for local testing.
 const API=(document.querySelector('meta[name="API"]')||{content:'https://points-chosen-ted-united.trycloudflare.com'}).content;
@@ -121,6 +102,19 @@ const player={
   pusherX:0,pusherY:0,pusherWave:0,pusherActive:0,pusherDropped:0
 };
 const particles=[];
+let snowParticles=[];
+let sandParticles=[];
+// debug overlay toggle state: press 'd' three times quickly to toggle
+let debugOverlayVisible = true;
+let debugKeySeqCount = 0;
+let debugKeySeqLast = 0; // ms
+const DEBUG_KEY_WINDOW = 800;
+let debugForceBiome = null; // null = normal cycling, or index to force
+let debugInfiniteRun = false;
+// readable biome names (order should match BIOME_MODULE.BIOMES)
+const BIOME_NAMES = ['Temperate','Autumn','Night','Winter','Desert'];
+// overlay hit regions computed during drawHud so pointerDown can reuse them
+let debugOverlayRegions = null;
 const safeProbe=document.createElement('div');
 safeProbe.style.cssText='position:fixed;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);pointer-events:none;visibility:hidden;width:0;height:0';
 document.body.appendChild(safeProbe);
@@ -644,6 +638,7 @@ function burst(x,y,n,color,speed){
 }
 function endRun(msg,crash){
   if(mode!=='play') return;
+  if(debugInfiniteRun) return; // prevent ending the run when infinite run is enabled
   reason=msg;mode='over';
   score=Math.max(0,Math.floor((player.x-startX)/10));
   newBest=score>best?1:0;
@@ -1314,6 +1309,59 @@ function drawHud(){
     }
     g.globalAlpha=1;g.lineCap='butt';
   }
+  // Debug overlay: show current biome, cycle, weather flags, and particle counts
+  try{
+    const dbgPad = 8;
+    const dx = pad + safeL;
+    const dy = pad + safeT + (API? mx(18,Math.round(22*s)) + 8 : 0);
+    g.save();
+    g.font='600 '+fs2+'px system-ui,sans-serif';
+  const lines = [];
+  const bi = curBiome && curBiome._biomeIndex!=null?curBiome._biomeIndex:'?';
+  const bc = curBiome && curBiome._cycle!=null?curBiome._cycle:'?';
+  const bname = (BIOME_NAMES && BIOME_NAMES[bi])? BIOME_NAMES[bi] : ('BIOME#'+bi);
+  lines.push(bname+'  (idx:'+bi+' cycle:'+bc+')');
+    const cactus = curBiome && curBiome.cactus?1:0;
+    const sandOn = curBiome && curBiome.weather && curBiome.weather.sandstormOn?1:0;
+    const snowOn = curBiome && curBiome.weather && curBiome.weather.snowOn?1:0;
+    const cloudy = curBiome && curBiome.weather && curBiome.weather.cloudy?1:0;
+    lines.push('cactus:'+cactus+' sand:'+sandOn+' snow:'+snowOn+' cloud:'+cloudy);
+    lines.push('sandP:'+ (sandParticles?sandParticles.length:0) +' snowP:'+ (snowParticles?snowParticles.length:0));
+    // measure
+    let bw=0; for(let i=0;i<lines.length;i++){ bw = Math.max(bw, Math.ceil(g.measureText(lines[i]).width)); }
+    const lh = Math.round(fs2*1.15);
+    // reserve space for 4 small buttons to the right of the text
+    const bs = Math.round(lh*0.9);
+    const btnCount = 4;
+    const btnGap = 6;
+    const buttonsW = btnCount*bs + (btnCount-1)*btnGap;
+    const boxW = bw + dbgPad*2 + buttonsW + 8;
+    const boxH = lines.length*lh + dbgPad*2;
+    g.globalAlpha = 0.56; g.fillStyle = '#000'; roundRect(dx-6, dy-6, boxW+12, boxH+12, 8); g.fill();
+    g.globalAlpha = 1; g.fillStyle = 'rgba(255,255,255,0.95)'; g.textAlign='left';
+    // only draw if debug overlay enabled
+    if(debugOverlayVisible){
+      const textX = dx + dbgPad;
+      for(let i=0;i<lines.length;i++){
+        g.fillText(lines[i], textX, dy + dbgPad + (i+0.9)*lh - (lh*0.12));
+      }
+      // draw buttons: prev, next, clear, infinite
+      const buttonsX = textX + bw + 8;
+      const labels = ['<','>','0','∞'];
+      g.font='600 '+Math.round(fs2*1.05)+'px system-ui,sans-serif';
+      const buttons = [];
+      for(let i=0;i<btnCount;i++){
+        const bxBtn = buttonsX + i*(bs+btnGap);
+        const byBtn = dy + dbgPad + Math.round((boxH - dbgPad*2 - bs)/2);
+        g.globalAlpha = 0.22; g.fillStyle = '#fff'; roundRect(bxBtn, byBtn, bs, bs, 6); g.fill();
+        g.globalAlpha = 1; g.fillStyle = '#000'; g.textAlign='center'; g.fillText(labels[i], bxBtn + bs*0.5, byBtn + bs*0.72);
+        buttons.push({x:bxBtn,y:byBtn,w:bs,h:bs,action:i});
+      }
+      // store overlay bounds and buttons for pointer hit testing
+      debugOverlayRegions = {box:{x:dx-6,y:dy-6,w:boxW+12,h:boxH+12}, buttons:buttons};
+    }
+    g.restore();
+  }catch(e){/* non-fatal debug overlay error shouldn't break game */}
 }
 function drawDeathLines(){
   if(!wifiOn||!deathData.length) return;
@@ -1510,6 +1558,36 @@ function drawOneTree(tx,baseY,kind,sc,dark){
   const col=dark?B.tree[0]:B.tree[1];
   const col2=dark?B.tree[1]:B.tree[0];
   const h=(kind===0?110:kind===1?130:115)*sc;
+  // If this biome uses cacti, draw a cactus instead of the leafy tree
+  if(B.cactus){
+    const w = 10*sc;
+    // main column
+    g.fillStyle = col;
+    g.fillRect(tx - w*0.28, baseY - h*0.9 + 4, w*0.56, h*0.86);
+    // rounded top
+    g.beginPath(); g.ellipse(tx, baseY - h*0.9 + 4, w*0.42, w*0.42, 0, 0, TAU); g.fill();
+    // arms depending on kind
+    if(kind===1){
+      // both arms
+      g.beginPath(); g.ellipse(tx - w*0.9, baseY - h*0.45, w*0.36, w*0.36, 0, 0, TAU); g.fill();
+      g.fillRect(tx - w*0.58, baseY - h*0.56, w*0.28, w*0.36);
+      g.beginPath(); g.ellipse(tx + w*0.9, baseY - h*0.45, w*0.36, w*0.36, 0, 0, TAU); g.fill();
+      g.fillRect(tx + w*0.28, baseY - h*0.56, w*0.28, w*0.36);
+    }else if(kind===2){
+      // single right arm
+      g.beginPath(); g.ellipse(tx + w*0.9, baseY - h*0.5, w*0.36, w*0.36, 0, 0, TAU); g.fill();
+      g.fillRect(tx + w*0.28, baseY - h*0.58, w*0.28, w*0.36);
+    }else{
+      // small rounded top only (kind 0)
+    }
+    // subtle lighter highlight
+    g.globalAlpha = (dark?0.28:0.36);
+    g.fillStyle = col2;
+    g.fillRect(tx - w*0.12, baseY - h*0.7, w*0.22, h*0.34);
+    g.globalAlpha = 1;
+    return;
+  }
+  // legacy tree drawing for non-desert biomes
   g.fillStyle=B.trunk;
   g.fillRect(tx-3,baseY-h*0.05,6,h*0.3);
   if(kind===0){
@@ -1640,7 +1718,15 @@ function tutBox(text,hb){
 }
 function render(){
   const dist=Math.max(0,Math.floor((player.x-startX)/10));
-  calcBiome(dist);
+  // Allow forcing a biome for debugging: pick a dist inside the chosen biome
+  if(debugForceBiome!=null && window.BIOME_MODULE && window.BIOME_MODULE.BIOMES){
+    let acc=0;
+    for(let i=0;i<debugForceBiome;i++) acc += (window.BIOME_MODULE.BIOMES[i] && window.BIOME_MODULE.BIOMES[i].len) || 0;
+    const fakeDist = acc + 10;
+    curBiome = (window.BIOME_MODULE && window.BIOME_MODULE.getCurBiome)? window.BIOME_MODULE.getCurBiome(fakeDist) : curBiome;
+  } else {
+    curBiome = (window.BIOME_MODULE && window.BIOME_MODULE.getCurBiome)? window.BIOME_MODULE.getCurBiome(dist) : curBiome;
+  }
   const B=curBiome;
   const sky=g.createLinearGradient(0,0,0,H);
   sky.addColorStop(0,B.sky[0]);
@@ -1698,6 +1784,89 @@ function render(){
   }
   drawTrees(0);
   drawWorld();
+
+  // Snow overlay (simple blurred bokeh-like circles) when winter snow is active
+  if(B.weather && B.weather.snowOn){
+    // clear sand particles when snow starts so old sand doesn't linger
+    if(sandParticles.length>0) sandParticles.length=0;
+    // spawn a few fine flakes based on width (lower rate to reduce CPU)
+    const spawnRate = Math.max(1, Math.floor(W/240));
+    for(let s=0;s<spawnRate;s++){
+      if(Math.random()<0.16){
+        // small flakes, biased to near-top but not too many
+        snowParticles.push({x:Math.random()*W, y: -6 - Math.random()*40, r:1+Math.random()*2, vy:0.8+Math.random()*1.4});
+      }
+    }
+    // cap snow particle count to avoid slowdowns
+    if(snowParticles.length > 260) snowParticles.splice(0, snowParticles.length - 240);
+    // update & draw (draw after world so overlays appear on top)
+    g.save();
+    // draw small filled rectangles for flakes (cheaper than arc + blur)
+    for(let i=snowParticles.length-1;i>=0;i--){
+      const p=snowParticles[i];
+      p.y += p.vy;
+      p.x += Math.sin((tNow+p.y)*0.01)*0.35; // gentle horizontal drift
+      if(p.y>H+30) snowParticles.splice(i,1);
+      else{
+        const alpha = Math.min(0.9, 0.6*(p.r/3));
+        g.globalAlpha = alpha;
+        g.fillStyle = 'rgba(255,255,255,1)';
+        // draw as a 1-3px rectangle for cheap subpixel snow
+        const w = Math.max(1, Math.round(p.r));
+        const h = Math.max(1, Math.round(p.r*0.6));
+        g.fillRect(p.x, p.y, w, h);
+      }
+    }
+    g.globalAlpha = 1;
+    g.restore();
+
+  // Sandstorm overlay when desert sandstorms are active
+  } else if(B.weather && B.weather.sandstormOn){
+    // spawn sand streaks from right side (wind leftwards); bias spawns low to feel like kicked-up sand
+    // clear snow particles when sandstorm starts so old snow doesn't linger
+    if(snowParticles.length>0) snowParticles.length=0;
+    const spawnRate = Math.max(1, Math.floor(W/160));
+    for(let s=0;s<spawnRate;s++){
+      if(Math.random()<0.6){
+        // bias 'r' towards 0 so y is nearer the ground; keeps particles low
+        const r = Math.pow(Math.random(), 2);
+        const y = H*0.45 + r * (H*0.5);
+        const len = 8 + Math.random()*28; // streak length
+        const h = 1 + Math.random()*1.6; // thin streak height
+        const vx = - (6 + Math.random()*10 + Math.abs(Math.sin(tNow*0.02))*3.0);
+        const vy = -0.6 + Math.random()*1.2;
+        const a = 0.04 + Math.random()*0.12;
+        sandParticles.push({x:W + Math.random()*120, y:y, w:len, h:h, vx: vx, vy: vy, a: a});
+      }
+    }
+    // cap particle count to avoid slowdowns
+    if(sandParticles.length > 400) sandParticles.splice(0, sandParticles.length - 380);
+    // update & draw sand particles (cheap rectangle streaks biased near ground)
+    g.save();
+    for(let i=sandParticles.length-1;i>=0;i--){
+      const p=sandParticles[i];
+      p.x += p.vx; p.y += p.vy;
+      if(p.x < -160 || p.y < -60 || p.y > H+60) { sandParticles.splice(i,1); continue; }
+      // small jitter on length for variety
+      const drawW = p.w * (0.9 + 0.2*Math.sin((tNow + p.x)*0.02));
+      g.globalAlpha = Math.min(0.9, Math.max(0.02, p.a));
+      g.fillStyle = 'rgba(200,160,110,1)';
+      // draw as a thin horizontal streak to read as blown sand
+      g.fillRect(p.x, p.y, drawW, Math.max(1, p.h));
+    }
+    // subtle tinted fog near ground (less intense than before)
+    const fogAlpha = 0.04 + Math.min(0.28, (sandParticles.length/Math.max(1,spawnRate))*0.04);
+    g.globalAlpha = fogAlpha;
+    g.fillStyle = 'rgba(230,200,150,1)';
+    g.fillRect(0, H*0.35, W, H*0.65);
+    g.globalAlpha = 1;
+    g.restore();
+
+  } else {
+    // clear arrays when neither snowing nor sandstorming
+    if(snowParticles.length>0) snowParticles.length=0;
+    if(sandParticles.length>0) sandParticles.length=0;
+  }
   drawParticles();
   if(mode!=='title') drawBuggy();
   drawTrees(1);
@@ -1971,6 +2140,35 @@ function keyDown(e){
     if(e.key==='Escape'){nameFocused=0;e.preventDefault();return;}
     e.preventDefault();return;
   }
+  // debug keys (only active when debug overlay visible)
+  if(debugOverlayVisible){
+    if(e.key==='['){ // previous biome
+      if(debugForceBiome==null) debugForceBiome = 0;
+      debugForceBiome = Math.max(0, debugForceBiome-1);
+      e.preventDefault(); return;
+    }
+    if(e.key===']'){ // next biome
+      if(debugForceBiome==null) debugForceBiome = 0;
+      debugForceBiome = Math.min((BIOME_MODULE.BIOMES.length-1), debugForceBiome+1);
+      e.preventDefault(); return;
+    }
+    if(e.key==='0'){ // clear forced biome
+      debugForceBiome = null; e.preventDefault(); return;
+    }
+    if(e.key==='i' || e.key==='I'){ // toggle infinite run
+      debugInfiniteRun = !debugInfiniteRun; e.preventDefault(); return;
+    }
+  }
+  // toggle debug overlay when user types 'd' three times quickly (skip when typing name)
+  if(!nameFocused && (e.key==='d' || e.key==='D')){
+    try{
+      const now = (performance && performance.now)? performance.now() : Date.now();
+      if(now - debugKeySeqLast <= DEBUG_KEY_WINDOW) debugKeySeqCount++; else debugKeySeqCount = 1;
+      debugKeySeqLast = now;
+      if(debugKeySeqCount >= 3){ debugOverlayVisible = !debugOverlayVisible; debugKeySeqCount = 0; }
+    }catch(_){/* ignore */}
+    e.preventDefault(); return;
+  }
   if(mode==='over'&&wifiOn&&(e.key==='ArrowDown'||e.key==='ArrowUp')){
     lbScroll+=e.key==='ArrowDown'?1:-1;e.preventDefault();return;
   }
@@ -2008,6 +2206,34 @@ function pointerDown(e){
       if(!wifiOn&&mode==='over'){nameFocused=0;nameBoxRect=null;}
       if(wifiOn){deathFetched=0;fetchLB();fetchDeaths();}
       e.preventDefault();return;
+    }
+  }
+  // clickable debug overlay region handling (same layout as drawHud)
+  // if drawHud calculated overlay regions, use them to detect clicks (reliable)
+  if(debugOverlayRegions){
+    const r = debugOverlayRegions.box;
+    if(px>=r.x && px<=r.x+r.w && py>=r.y && py<=r.y+r.h){
+      // check buttons
+      for(const b of (debugOverlayRegions.buttons||[])){
+        if(px>=b.x && px<=b.x+b.w && py>=b.y && py<=b.y+b.h){
+          if(b.action===0){ // prev
+            if(debugForceBiome==null) debugForceBiome = (curBiome&&curBiome._biomeIndex!=null)?curBiome._biomeIndex:0;
+            debugForceBiome = Math.max(0, debugForceBiome-1);
+            queueCenterCue('FORCE: '+(BIOME_NAMES[debugForceBiome]||('BIOME#'+debugForceBiome)));
+          }else if(b.action===1){ // next
+            if(debugForceBiome==null) debugForceBiome = (curBiome&&curBiome._biomeIndex!=null)?curBiome._biomeIndex:0;
+            debugForceBiome = Math.min((BIOME_MODULE&&BIOME_MODULE.BIOMES?BIOME_MODULE.BIOMES.length-1:4), debugForceBiome+1);
+            queueCenterCue('FORCE: '+(BIOME_NAMES[debugForceBiome]||('BIOME#'+debugForceBiome)));
+          }else if(b.action===2){ // clear
+            debugForceBiome = null; queueCenterCue('FORCE: OFF');
+          }else if(b.action===3){ // infinite toggle
+            debugInfiniteRun = !debugInfiniteRun; queueCenterCue('INFINITE: '+(debugInfiniteRun?'ON':'OFF'));
+          }
+          e.preventDefault(); return;
+        }
+      }
+      // clicked inside overlay but not on a button: consume
+      e.preventDefault(); return;
     }
   }
   if(mode==='title'){
