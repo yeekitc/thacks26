@@ -118,7 +118,7 @@ let debugForceTime = null; // index into BIOME_MODULE.TIMES or null
 // readable biome names (order should match BIOME_MODULE.BIOMES)
 const BIOME_NAMES = ['Temperate','Autumn','Night','Winter','Desert'];
 // overlay hit regions computed during drawHud so pointerDown can reuse them
-let debugOverlayRegions = null;
+// debug overlay hit regions removed (compact status uses no interactive overlay)
 const safeProbe=document.createElement('div');
 safeProbe.style.cssText='position:fixed;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);pointer-events:none;visibility:hidden;width:0;height:0';
 document.body.appendChild(safeProbe);
