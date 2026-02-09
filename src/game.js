@@ -104,16 +104,12 @@ const player={
 const particles=[];
 let snowParticles=[];
 let sandParticles=[];
-// debug overlay toggle state: press 'd' three times quickly to toggle
-// Default off in production; enable with triple-'d' when debugging
+// Minimal debug toggle: triple-'d' to show the compact top-center status line.
+// Kept intentionally tiny: default off in production, enable with triple-'d'.
 let debugOverlayVisible = false;
 let debugKeySeqCount = 0;
 let debugKeySeqLast = 0; // ms
-const DEBUG_KEY_WINDOW = 800;
-let debugForceBiome = null; // null = normal cycling, or index to force
-let debugInfiniteRun = false;
-let debugForcePlace = null; // index into BIOME_MODULE.PLACES or null
-let debugForceTime = null; // index into BIOME_MODULE.TIMES or null
+const DEBUG_KEY_WINDOW = 800; // ms window to press triple-'d'
 // evening variant debug control removed
 // readable biome names (order should match BIOME_MODULE.BIOMES)
 const BIOME_NAMES = ['Temperate','Autumn','Night','Winter','Desert'];
@@ -642,7 +638,6 @@ function burst(x,y,n,color,speed){
 }
 function endRun(msg,crash){
   if(mode!=='play') return;
-  if(debugInfiniteRun) return; // prevent ending the run when infinite run is enabled
   reason=msg;mode='over';
   score=Math.max(0,Math.floor((player.x-startX)/10));
   newBest=score>best?1:0;
@@ -1314,7 +1309,7 @@ function drawHud(){
     g.globalAlpha=1;g.lineCap='butt';
   }
   // Compact status line: show current place, time and active weather flags at top-center
-  // only show compact debug status when debug overlay flag is enabled
+  // only show compact status when debugOverlayVisible is true (toggle with triple-'d')
   if(debugOverlayVisible){
     try{
       g.save();
@@ -1710,28 +1705,8 @@ function tutBox(text,hb){
 }
 function render(){
   const dist=Math.max(0,Math.floor((player.x-startX)/10));
-  // Allow forcing a biome/place/time for debugging: pick a dist inside the chosen biome
-  if(debugForceBiome!=null && window.BIOME_MODULE && window.BIOME_MODULE.BIOMES){
-    let acc=0;
-    for(let i=0;i<debugForceBiome;i++) acc += (window.BIOME_MODULE.BIOMES[i] && window.BIOME_MODULE.BIOMES[i].len) || 0;
-    const fakeDist = acc + 10;
-    curBiome = (window.BIOME_MODULE && window.BIOME_MODULE.getCurBiome)? window.BIOME_MODULE.getCurBiome(fakeDist) : curBiome;
-  } else if((debugForcePlace!=null || debugForceTime!=null) && window.BIOME_MODULE && window.BIOME_MODULE.PLACES && window.BIOME_MODULE.TIMES){
-    const places = window.BIOME_MODULE.PLACES;
-    const times = window.BIOME_MODULE.TIMES;
-    // derive current place/time indices if not forced
-    const curPlaceIdx = (curBiome && curBiome.place)? places.findIndex(p=>p.id===curBiome.place) : 0;
-    const curTimeIdx = (curBiome && curBiome.time)? times.findIndex(t=>t.id===curBiome.time) : 0;
-    const pIdx = debugForcePlace!=null? clamp(debugForcePlace,0,places.length-1) : (curPlaceIdx<0?0:curPlaceIdx);
-    const tIdx = debugForceTime!=null? clamp(debugForceTime,0,times.length-1) : (curTimeIdx<0?0:curTimeIdx);
-    const biIndex = pIdx * times.length + tIdx;
-    let acc = 0;
-    for(let i=0;i<biIndex;i++) acc += (window.BIOME_MODULE.BIOMES[i] && window.BIOME_MODULE.BIOMES[i].len) || 0;
-    const fakeDist = acc + 10;
-    curBiome = (window.BIOME_MODULE && window.BIOME_MODULE.getCurBiome)? window.BIOME_MODULE.getCurBiome(fakeDist) : curBiome;
-  } else {
-    curBiome = (window.BIOME_MODULE && window.BIOME_MODULE.getCurBiome)? window.BIOME_MODULE.getCurBiome(dist) : curBiome;
-  }
+  // Select current biome based on player distance
+  curBiome = (window.BIOME_MODULE && window.BIOME_MODULE.getCurBiome) ? window.BIOME_MODULE.getCurBiome(dist) : curBiome;
   const B=curBiome;
   const sky=g.createLinearGradient(0,0,0,H);
   sky.addColorStop(0,B.sky[0]);
@@ -2104,26 +2079,7 @@ function keyDown(e){
     if(e.key==='Escape'){nameFocused=0;e.preventDefault();return;}
     e.preventDefault();return;
   }
-  // debug keys (only active when debug overlay visible)
-  if(debugOverlayVisible){
-    if(e.key==='['){ // previous biome
-      if(debugForceBiome==null) debugForceBiome = 0;
-      debugForceBiome = Math.max(0, debugForceBiome-1);
-      e.preventDefault(); return;
-    }
-    if(e.key===']'){ // next biome
-      if(debugForceBiome==null) debugForceBiome = 0;
-      debugForceBiome = Math.min((BIOME_MODULE.BIOMES.length-1), debugForceBiome+1);
-      e.preventDefault(); return;
-    }
-    if(e.key==='0'){ // clear forced biome
-      debugForceBiome = null; e.preventDefault(); return;
-    }
-    if(e.key==='i' || e.key==='I'){ // toggle infinite run
-      debugInfiniteRun = !debugInfiniteRun; e.preventDefault(); return;
-    }
-  }
-  // toggle debug overlay when user types 'd' three times quickly (skip when typing name)
+  // triple-'d' toggles compact status line (no other debug keys)
   if(!nameFocused && (e.key==='d' || e.key==='D')){
     try{
       const now = (performance && performance.now)? performance.now() : Date.now();
