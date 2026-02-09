@@ -105,7 +105,8 @@ const particles=[];
 let snowParticles=[];
 let sandParticles=[];
 // debug overlay toggle state: press 'd' three times quickly to toggle
-let debugOverlayVisible = true;
+// Default off in production; enable with triple-'d' when debugging
+let debugOverlayVisible = false;
 let debugKeySeqCount = 0;
 let debugKeySeqLast = 0; // ms
 const DEBUG_KEY_WINDOW = 800;
