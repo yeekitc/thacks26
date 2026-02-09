@@ -132,21 +132,19 @@ function getCurBiome(dist){
       const rCloud = seededRand(seedBase + 11);
       const rRain = seededRand(seedBase + 23);
       const rStars = seededRand(seedBase + 37);
-      const rSand = seededRand(seedBase + 53);
-      const rSnow = seededRand(seedBase + 67);
+  const rSnow = seededRand(seedBase + 67);
       // cloud probability influenced by cloud numeric
       const cloudProb = Math.min(0.95, (outB.cloud||b.cloud)*2.5);
       const cloudy = rCloud < cloudProb;
       const rain = rRain < 0.08; // small chance any biome/time can have rain
       const starsOn = ( (b.time==='night' || outB.time==='night') && rStars < 0.85 );
-      const sandOn = (b.place==='desert') && (rSand < 0.22);
-      const snowOn = (b.place==='arctic') && (rSnow < 0.18);
+  const snowOn = (b.place==='arctic') && (rSnow < 0.18);
 
       const out = Object.assign({}, outB);
       out._biomeIndex = i; out._cycle = cycleNum;
       out.cloud = cloudy ? (out.cloud||b.cloud) : 0;
       out.stars = starsOn ? (out.stars||b.stars) : 0;
-      out.weather = {cloudy:cloudy, rain:rain, starsOn:starsOn, sandstormOn:sandOn, snowOn:snowOn};
+  out.weather = {cloudy:cloudy, rain:rain, starsOn:starsOn, snowOn:snowOn};
       return out;
     }
     acc += b.len;

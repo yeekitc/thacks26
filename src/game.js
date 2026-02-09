@@ -1312,92 +1312,36 @@ function drawHud(){
     }
     g.globalAlpha=1;g.lineCap='butt';
   }
-  // Debug overlay: show current biome, cycle, weather flags, and particle counts
-  try{
-    const dbgPad = 8;
-    const dx = pad + safeL;
-    const dy = pad + safeT + (API? mx(18,Math.round(22*s)) + 8 : 0);
-    g.save();
-    g.font='600 '+fs2+'px system-ui,sans-serif';
-  const lines = [];
-  const bi = curBiome && curBiome._biomeIndex!=null?curBiome._biomeIndex:'?';
-  const bc = curBiome && curBiome._cycle!=null?curBiome._cycle:'?';
-  const bname = (BIOME_NAMES && BIOME_NAMES[bi])? BIOME_NAMES[bi] : ('BIOME#'+bi);
-  lines.push(bname+'  (idx:'+bi+' cycle:'+bc+')');
-    const cactus = curBiome && curBiome.cactus?1:0;
-    const sandOn = curBiome && curBiome.weather && curBiome.weather.sandstormOn?1:0;
-    const snowOn = curBiome && curBiome.weather && curBiome.weather.snowOn?1:0;
-    const cloudy = curBiome && curBiome.weather && curBiome.weather.cloudy?1:0;
-    lines.push('cactus:'+cactus+' sand:'+sandOn+' snow:'+snowOn+' cloud:'+cloudy);
-    lines.push('sandP:'+ (sandParticles?sandParticles.length:0) +' snowP:'+ (snowParticles?snowParticles.length:0));
-    // measure
-    let bw=0; for(let i=0;i<lines.length;i++){ bw = Math.max(bw, Math.ceil(g.measureText(lines[i]).width)); }
-    const lh = Math.round(fs2*1.15);
-    // reserve space for 4 small buttons to the right of the text
-    const bs = Math.round(lh*0.9);
-    const btnCount = 4;
-    const btnGap = 6;
-    const buttonsW = btnCount*bs + (btnCount-1)*btnGap;
-    const boxW = bw + dbgPad*2 + buttonsW + 8;
-    const boxH = lines.length*lh + dbgPad*2;
-    g.globalAlpha = 0.56; g.fillStyle = '#000'; roundRect(dx-6, dy-6, boxW+12, boxH+12, 8); g.fill();
-    g.globalAlpha = 1; g.fillStyle = 'rgba(255,255,255,0.95)'; g.textAlign='left';
-    // only draw if debug overlay enabled
-    if(debugOverlayVisible){
-      const textX = dx + dbgPad;
-      for(let i=0;i<lines.length;i++){
-        g.fillText(lines[i], textX, dy + dbgPad + (i+0.9)*lh - (lh*0.12));
-      }
-      // draw buttons: prev, next, clear, infinite (main controls)
-      const buttonsX = textX + bw + 8;
-      const labels = ['<','>','0','∞'];
-      g.font='600 '+Math.round(fs2*1.05)+'px system-ui,sans-serif';
-      const buttons = [];
-      for(let i=0;i<btnCount;i++){
-        const bxBtn = buttonsX + i*(bs+btnGap);
-        const byBtn = dy + dbgPad + Math.round((boxH - dbgPad*2 - bs)/2);
-        g.globalAlpha = 0.22; g.fillStyle = '#fff'; roundRect(bxBtn, byBtn, bs, bs, 6); g.fill();
-        g.globalAlpha = 1; g.fillStyle = '#000'; g.textAlign='center'; g.fillText(labels[i], bxBtn + bs*0.5, byBtn + bs*0.72);
-        buttons.push({x:bxBtn,y:byBtn,w:bs,h:bs,action:i});
-      }
-      // place/time controls: left, label, right for each
-      const ctrlY = dy + dbgPad + boxH + 8;
-      const ctrlW = Math.round(Math.min(220, Math.max(140, bw*0.48)));
-      const ctrlH = Math.round(lh*0.95);
-      const gap = 8;
-      const placeX = textX;
-      const timeX = textX + ctrlW + gap + 8;
-      // compute current place/time display names
+  // Compact status line: show current place, time and active weather flags at top-center
+  // only show compact debug status when debug overlay flag is enabled
+  if(debugOverlayVisible){
+    try{
+      g.save();
+      g.font = '600 '+Math.round(12*s)+'px system-ui,sans-serif';
       const places = (window.BIOME_MODULE && window.BIOME_MODULE.PLACES) || [];
       const timesArr = (window.BIOME_MODULE && window.BIOME_MODULE.TIMES) || [];
       const curPlaceName = (curBiome && curBiome.place) ? (places.find(p=>p.id===curBiome.place)||{}).name || curBiome.place : (places[0]&&places[0].name)||'Place';
       const curTimeName = (curBiome && curBiome.time) ? (timesArr.find(t=>t.id===curBiome.time)||{}).name || curBiome.time : (timesArr[0]&&timesArr[0].name)||'Time';
-      // draw place control
-      g.globalAlpha=0.18; g.fillStyle='#fff'; roundRect(placeX, ctrlY, ctrlW, ctrlH,6); g.fill();
-      g.globalAlpha=1; g.fillStyle='#000'; g.textAlign='left'; g.fillText('Place: '+curPlaceName, placeX+8, ctrlY+ctrlH*0.72);
-      // draw time control
-      g.globalAlpha=0.18; g.fillStyle='#fff'; roundRect(timeX, ctrlY, ctrlW, ctrlH,6); g.fill();
-      g.globalAlpha=1; g.fillStyle='#000'; g.textAlign='left'; g.fillText('Time: '+curTimeName, timeX+8, ctrlY+ctrlH*0.72);
-  // place/time small arrows (left/right) hitboxes
-      const arrowW = Math.round(ctrlH*0.8);
-      const placePrev = {x:placeX+ctrlW- (arrowW*2 + 4), y:ctrlY + Math.round((ctrlH-arrowW)/2), w:arrowW, h:arrowW, action:'placePrev'};
-      const placeNext = {x:placeX+ctrlW- (arrowW), y:ctrlY + Math.round((ctrlH-arrowW)/2), w:arrowW, h:arrowW, action:'placeNext'};
-      const timePrev = {x:timeX+ctrlW- (arrowW*2 + 4), y:ctrlY + Math.round((ctrlH-arrowW)/2), w:arrowW, h:arrowW, action:'timePrev'};
-      const timeNext = {x:timeX+ctrlW- (arrowW), y:ctrlY + Math.round((ctrlH-arrowW)/2), w:arrowW, h:arrowW, action:'timeNext'};
-
-      // draw arrows for place/time
-      g.globalAlpha=0.22; g.fillStyle='#fff'; roundRect(placePrev.x,placePrev.y,placePrev.w,placePrev.h,4); roundRect(placeNext.x,placeNext.y,placeNext.w,placeNext.h,4); roundRect(timePrev.x,timePrev.y,timePrev.w,timePrev.h,4); roundRect(timeNext.x,timeNext.y,timeNext.w,timeNext.h,4); g.fill();
-      g.globalAlpha=1; g.fillStyle='#000'; g.textAlign='center'; g.fillText('<', placePrev.x+placePrev.w*0.5, placePrev.y+placePrev.h*0.76); g.fillText('>', placeNext.x+placeNext.w*0.5, placeNext.y+placeNext.h*0.76);
-      g.fillText('<', timePrev.x+timePrev.w*0.5, timePrev.y+timePrev.h*0.76); g.fillText('>', timeNext.x+timeNext.w*0.5, timeNext.y+timeNext.h*0.76);
-
-      // store overlay bounds, buttons and controls for pointer hit testing
-  const controlsArr = [placePrev,placeNext,timePrev,timeNext];
-      if(evLabel) controlsArr.push(evPrev, evNext);
-      const labelsArr = [{x:placeX,y:ctrlY,w:ctrlW,h:ctrlH,kind:'place'},{x:timeX,y:ctrlY,w:ctrlW,h:ctrlH,kind:'time'}];
-      debugOverlayRegions = {box:{x:dx-6,y:dy-6,w:boxW+12,h:boxH+12 + ctrlH + 12}, buttons:buttons, controls:controlsArr, controlLabels:labelsArr};
-    }
-    g.restore();
-  }catch(e){/* non-fatal debug overlay error shouldn't break game */}
+      const wobj = (curBiome && curBiome.weather) || {};
+      const flags = [];
+      if(wobj.cloudy) flags.push('cloudy');
+      if(wobj.rain) flags.push('rain');
+      if(wobj.starsOn) flags.push('stars');
+      if(wobj.snowOn) flags.push('snow');
+      const flagsText = flags.length?('  '+flags.join(' ')) : '';
+      const text = curPlaceName + ' • ' + curTimeName + flagsText;
+      const textW = Math.ceil(g.measureText(text).width);
+      const pad2 = Math.round(8*s);
+      const boxW = textW + pad2*2;
+      const boxH = Math.round(12*s) + pad2;
+      const cx = Math.round(W*0.5 - boxW*0.5);
+      const cy = Math.round(pad + safeT + (API? Math.max(18,Math.round(22*s)) + 4 : 0));
+      g.globalAlpha = 0.36; g.fillStyle = '#000'; roundRect(cx-6, cy-6, boxW+12, boxH+12, 8); g.fill();
+      g.globalAlpha = 1; g.fillStyle = 'rgba(255,255,255,0.95)'; g.textAlign='center';
+      g.fillText(text, W*0.5, cy + Math.round(boxH*0.7));
+      g.restore();
+    }catch(e){/* non-fatal */}
+  }
 }
 function drawDeathLines(){
   if(!wifiOn||!deathData.length) return;
@@ -1588,7 +1532,7 @@ function drawButton(b,key){
   g.textAlign='left';
   g.globalAlpha=1;
 }
-function drawOneTree(tx,baseY,kind,sc,dark){
+function drawOneTree(tx,baseY,kind,sc,dark, idx){
   g.globalAlpha=dark?0.55:0.7;
     const B=curBiome;
     // Note: evening-variant overrides removed — BIOME_MODULE no longer exposes EVENING_VARIANTS
@@ -1596,31 +1540,41 @@ function drawOneTree(tx,baseY,kind,sc,dark){
   const col2=dark?B.tree[1]:B.tree[0];
   const h=(kind===0?110:kind===1?130:115)*sc;
   // If this biome uses cacti, draw a cactus instead of the leafy tree
+  // WIP: cactus rendering — experimental shapes; refine later
   if(B.cactus){
-    const w = 10*sc;
-    // main column
-    g.fillStyle = col;
+    const w = 14*sc; // thicker cactus trunk
+    const colMain = col;
+    const colLight = col2;
+    // main column (rounded-cap)
+    g.fillStyle = colMain;
     g.fillRect(tx - w*0.28, baseY - h*0.9 + 4, w*0.56, h*0.86);
-    // rounded top
-    g.beginPath(); g.ellipse(tx, baseY - h*0.9 + 4, w*0.42, w*0.42, 0, 0, TAU); g.fill();
-    // arms depending on kind
-    if(kind===1){
-      // both arms
-      g.beginPath(); g.ellipse(tx - w*0.9, baseY - h*0.45, w*0.36, w*0.36, 0, 0, TAU); g.fill();
-      g.fillRect(tx - w*0.58, baseY - h*0.56, w*0.28, w*0.36);
-      g.beginPath(); g.ellipse(tx + w*0.9, baseY - h*0.45, w*0.36, w*0.36, 0, 0, TAU); g.fill();
-      g.fillRect(tx + w*0.28, baseY - h*0.56, w*0.28, w*0.36);
-    }else if(kind===2){
-      // single right arm
-      g.beginPath(); g.ellipse(tx + w*0.9, baseY - h*0.5, w*0.36, w*0.36, 0, 0, TAU); g.fill();
-      g.fillRect(tx + w*0.28, baseY - h*0.58, w*0.28, w*0.36);
-    }else{
-      // small rounded top only (kind 0)
+    g.beginPath(); g.ellipse(tx, baseY - h*0.9 + 4, w*0.48, w*0.48, 0, 0, TAU); g.fill();
+    // deterministic variant per tree index (idx) for stable shapes
+    const seed = (typeof idx === 'number') ? (idx*7919 + kind*97) : (Math.floor(baseY*13) + kind*97);
+    const rnd = (n)=> (Math.abs(Math.sin(seed + n*12.9898))*43758.5453) % 1;
+    // choose variant: 0 = both side columns, 1 = right only, 2 = left only
+    const variant = Math.floor(rnd(1)*3);
+    const sideW = Math.max(6, Math.round(w*0.6));
+    // left side column
+    if(variant===0 || variant===2){
+      const leftH = Math.round(h * (0.55 + rnd(2)*0.2));
+      const lx = tx - w*0.9;
+      g.fillStyle = colMain;
+      g.fillRect(lx - sideW*0.5, baseY - leftH, sideW, leftH);
+      g.beginPath(); g.ellipse(lx, baseY - leftH, sideW*0.52, sideW*0.52, 0, 0, TAU); g.fill();
     }
-    // subtle lighter highlight
+    // right side column
+    if(variant===0 || variant===1){
+      const rightH = Math.round(h * (0.45 + rnd(3)*0.28));
+      const rx = tx + w*0.9;
+      g.fillStyle = colMain;
+      g.fillRect(rx - sideW*0.5, baseY - rightH, sideW, rightH);
+      g.beginPath(); g.ellipse(rx, baseY - rightH, sideW*0.52, sideW*0.52, 0, 0, TAU); g.fill();
+    }
+    // subtle lighter highlight down the center of main trunk
     g.globalAlpha = (dark?0.28:0.36);
-    g.fillStyle = col2;
-    g.fillRect(tx - w*0.12, baseY - h*0.7, w*0.22, h*0.34);
+    g.fillStyle = colLight;
+    g.fillRect(tx - w*0.08, baseY - h*0.7, w*0.18, h*0.36);
     g.globalAlpha = 1;
     return;
   }
@@ -1657,7 +1611,7 @@ function drawTrees(layer){
       if(sx<-80||sx>W+80) continue;
       const kind=((i*13+7)%3)|0;
       const sc=0.8+(((i<0?-i:i)*7)%5)*0.12;
-      drawOneTree(sx,sy,kind,sc,true);
+      drawOneTree(sx,sy,kind,sc,true,i);
     }
   }else{
     const spd=0.25,n=14,spread=160;
@@ -1669,7 +1623,7 @@ function drawTrees(layer){
       const kind=((i*13+7)%3);
       const by=yBase+Math.sin(i*1.3+0.5)*10+((i*11)%7)*2;
       const sc=0.8+((i*7)%5)*0.12;
-      drawOneTree(tx,by,kind,sc,false);
+      drawOneTree(tx,by,kind,sc,false,i);
     }
   }
 }
@@ -1870,48 +1824,7 @@ function render(){
     g.globalAlpha = 1;
     g.restore();
 
-  // Sandstorm overlay when desert sandstorms are active
-  } else if(B.weather && B.weather.sandstormOn){
-    // spawn sand streaks from right side (wind leftwards); bias spawns low to feel like kicked-up sand
-    // clear snow particles when sandstorm starts so old snow doesn't linger
-    if(snowParticles.length>0) snowParticles.length=0;
-    const spawnRate = Math.max(1, Math.floor(W/160));
-    for(let s=0;s<spawnRate;s++){
-      if(Math.random()<0.6){
-        // bias 'r' towards 0 so y is nearer the ground; keeps particles low
-        const r = Math.pow(Math.random(), 2);
-        const y = H*0.45 + r * (H*0.5);
-        const len = 8 + Math.random()*28; // streak length
-        const h = 1 + Math.random()*1.6; // thin streak height
-        const vx = - (6 + Math.random()*10 + Math.abs(Math.sin(tNow*0.02))*3.0);
-        const vy = -0.6 + Math.random()*1.2;
-        const a = 0.04 + Math.random()*0.12;
-        sandParticles.push({x:W + Math.random()*120, y:y, w:len, h:h, vx: vx, vy: vy, a: a});
-      }
-    }
-    // cap particle count to avoid slowdowns
-    if(sandParticles.length > 400) sandParticles.splice(0, sandParticles.length - 380);
-    // update & draw sand particles (cheap rectangle streaks biased near ground)
-    g.save();
-    for(let i=sandParticles.length-1;i>=0;i--){
-      const p=sandParticles[i];
-      p.x += p.vx; p.y += p.vy;
-      if(p.x < -160 || p.y < -60 || p.y > H+60) { sandParticles.splice(i,1); continue; }
-      // small jitter on length for variety
-      const drawW = p.w * (0.9 + 0.2*Math.sin((tNow + p.x)*0.02));
-      g.globalAlpha = Math.min(0.9, Math.max(0.02, p.a));
-      g.fillStyle = 'rgba(200,160,110,1)';
-      // draw as a thin horizontal streak to read as blown sand
-      g.fillRect(p.x, p.y, drawW, Math.max(1, p.h));
-    }
-    // subtle tinted fog near ground (less intense than before)
-    const fogAlpha = 0.04 + Math.min(0.28, (sandParticles.length/Math.max(1,spawnRate))*0.04);
-    g.globalAlpha = fogAlpha;
-    g.fillStyle = 'rgba(230,200,150,1)';
-    g.fillRect(0, H*0.35, W, H*0.65);
-    g.globalAlpha = 1;
-    g.restore();
-
+  // Sandstorms removed: desert will no longer spawn sand particles or fog.
   } else {
     // clear arrays when neither snowing nor sandstorming
     if(snowParticles.length>0) snowParticles.length=0;
@@ -2258,74 +2171,7 @@ function pointerDown(e){
       e.preventDefault();return;
     }
   }
-  // clickable debug overlay region handling (same layout as drawHud)
-  // if drawHud calculated overlay regions, use them to detect clicks (reliable)
-  if(debugOverlayRegions){
-    const r = debugOverlayRegions.box;
-    if(px>=r.x && px<=r.x+r.w && py>=r.y && py<=r.y+r.h){
-      // check buttons
-      for(const b of (debugOverlayRegions.buttons||[])){
-        if(px>=b.x && px<=b.x+b.w && py>=b.y && py<=b.y+b.h){
-          if(b.action===0){ // prev
-            if(debugForceBiome==null) debugForceBiome = (curBiome&&curBiome._biomeIndex!=null)?curBiome._biomeIndex:0;
-            debugForceBiome = Math.max(0, debugForceBiome-1);
-            queueCenterCue('FORCE: '+(BIOME_NAMES[debugForceBiome]||('BIOME#'+debugForceBiome)));
-          }else if(b.action===1){ // next
-            if(debugForceBiome==null) debugForceBiome = (curBiome&&curBiome._biomeIndex!=null)?curBiome._biomeIndex:0;
-            debugForceBiome = Math.min((BIOME_MODULE&&BIOME_MODULE.BIOMES?BIOME_MODULE.BIOMES.length-1:4), debugForceBiome+1);
-            queueCenterCue('FORCE: '+(BIOME_NAMES[debugForceBiome]||('BIOME#'+debugForceBiome)));
-          }else if(b.action===2){ // clear
-            debugForceBiome = null; queueCenterCue('FORCE: OFF');
-          }else if(b.action===3){ // infinite toggle
-            debugInfiniteRun = !debugInfiniteRun; queueCenterCue('INFINITE: '+(debugInfiniteRun?'ON':'OFF'));
-          }
-          e.preventDefault(); return;
-        }
-      }
-      // check place/time controls
-      for(const c of (debugOverlayRegions.controls||[])){
-        if(px>=c.x && px<=c.x+c.w && py>=c.y && py<=c.y+c.h){
-          const places = (window.BIOME_MODULE && window.BIOME_MODULE.PLACES) || [];
-          const times = (window.BIOME_MODULE && window.BIOME_MODULE.TIMES) || [];
-          if(c.action==='placePrev' || c.action==='placeNext'){
-            if(debugForcePlace==null){ // initialize to current place
-              debugForcePlace = Math.max(0, (curBiome&&curBiome.place)? (places.findIndex(p=>p.id===curBiome.place)) : 0);
-            }
-            if(c.action==='placePrev') debugForcePlace = (debugForcePlace - 1 + places.length) % places.length;
-            else debugForcePlace = (debugForcePlace + 1) % places.length;
-            queueCenterCue('PLACE: '+(places[debugForcePlace]?places[debugForcePlace].name:debugForcePlace));
-            e.preventDefault(); return;
-          }
-          if(c.action==='timePrev' || c.action==='timeNext'){
-            if(debugForceTime==null){ // initialize to current time
-              debugForceTime = Math.max(0, (curBiome&&curBiome.time)? (times.findIndex(t=>t.id===curBiome.time)) : 0);
-            }
-            if(c.action==='timePrev') debugForceTime = (debugForceTime - 1 + times.length) % times.length;
-            else debugForceTime = (debugForceTime + 1) % times.length;
-            queueCenterCue('TIME: '+(times[debugForceTime]?times[debugForceTime].name:debugForceTime));
-            e.preventDefault(); return;
-          }
-          // evening variant handlers removed
-        }
-      }
-      // check taps on the place/time label boxes to clear forcing
-      for(const lbl of (debugOverlayRegions.controlLabels||[])){
-        if(px>=lbl.x && px<=lbl.x+lbl.w && py>=lbl.y && py<=lbl.y+lbl.h){
-          if(lbl.kind==='place'){
-            if(debugForcePlace!=null){ debugForcePlace=null; queueCenterCue('PLACE: OFF'); }
-            else { const places=(window.BIOME_MODULE&&window.BIOME_MODULE.PLACES)||[]; debugForcePlace = Math.max(0,(curBiome&&curBiome.place)?places.findIndex(p=>p.id===curBiome.place):0); queueCenterCue('PLACE: '+(places[debugForcePlace]?places[debugForcePlace].name:debugForcePlace)); }
-            e.preventDefault(); return;
-          }else if(lbl.kind==='time'){
-            if(debugForceTime!=null){ debugForceTime=null; queueCenterCue('TIME: OFF'); }
-            else { const times=(window.BIOME_MODULE&&window.BIOME_MODULE.TIMES)||[]; debugForceTime = Math.max(0,(curBiome&&curBiome.time)?times.findIndex(t=>t.id===curBiome.time):0); queueCenterCue('TIME: '+(times[debugForceTime]?times[debugForceTime].name:debugForceTime)); }
-            e.preventDefault(); return;
-          }
-        }
-      }
-      // clicked inside overlay but not on a button: consume
-      e.preventDefault(); return;
-    }
-  }
+  
   if(mode==='title'){
     if(hitSkip(px,py)){
       startRunFromTitle();
