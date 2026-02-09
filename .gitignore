@@ -46,11 +46,3 @@ temp/
 server/leaderboard.db
 __pycache__/
 *.pyc
-
-# Database backup files (created during maintenance) — don't commit these
-server/leaderboard.db.bak*
-server/*.db.bak*
-server/*.bak
-
-# Keep a dedicated backups folder for DB backups
-server/backups/
