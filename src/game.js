@@ -55,7 +55,20 @@ let tNow=0,score=0,best=0,startX=0,newBest=0;
 let camX=0,camY=0,rollT=0;
 let tutorialStep=0,tutorialTimer=0;
 const input={call:0,act:0};
-
+function hexToRgb(h){const n=parseInt(h.slice(1),16);return[n>>16,(n>>8)&255,n&255]}
+function lC(a,b,t){return'rgb('+(a[0]+(b[0]-a[0])*t|0)+','+(a[1]+(b[1]-a[1])*t|0)+','+(a[2]+(b[2]-a[2])*t|0)+')'}
+function lN(a,b,t){return a+(b-a)*t}
+// Biome data and selection moved to src/biome.js (BIOME_MODULE)
+// Fallbacks in case the module isn't loaded (keeps game runnable).
+const BIOME_MODULE = window.BIOME_MODULE || (function(){
+  console.warn('BIOME_MODULE not found; using minimal fallback');
+  // minimal fallback: a single neutral biome
+  const fb = {len:1000,sky:['#333','#555','#777'],sun:1,moon:0,stars:0,mtn:['#666','#555','#444'],gnd:['#372','#241','#120'],tree:['#203','#102'],trunk:'#331',cloud:0.1};
+  return {BIOMES:[fb],_BC:fb.len,getCurBiome:()=>fb};
+})();
+let curBiome = BIOME_MODULE.getCurBiome(0);
+// Read API URL from a <meta name="API"> tag when present, otherwise
+// fall back to the supplied Cloudflare tunnel URL for local testing.
 const API=(document.querySelector('meta[name="API"]')||{content:'https://points-chosen-ted-united.trycloudflare.com'}).content;
 let wifiOn=0,lbData=[],deathData=[],deathFetched=0;
 let nameInput='',nameConfirmed=0,nameFocused=0,scoreSubmitted=0,lbScroll=0,nameBoxRect=null;
@@ -93,6 +106,19 @@ const player={
 };
 
 const particles=[];
+let snowParticles=[];
+let sandParticles=[];
+// Minimal debug toggle: triple-'d' to show the compact top-center status line.
+// Kept intentionally tiny: default off in production, enable with triple-'d'.
+let debugOverlayVisible = false;
+let debugKeySeqCount = 0;
+let debugKeySeqLast = 0; // ms
+const DEBUG_KEY_WINDOW = 800; // ms window to press triple-'d'
+// evening variant debug control removed
+// readable biome names (order should match BIOME_MODULE.BIOMES)
+const BIOME_NAMES = ['Temperate','Autumn','Night','Winter','Desert'];
+// overlay hit regions computed during drawHud so pointerDown can reuse them
+// debug overlay hit regions removed (compact status uses no interactive overlay)
 const safeProbe=document.createElement('div');
 safeProbe.style.cssText='position:fixed;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);pointer-events:none;visibility:hidden;width:0;height:0';
 document.body.appendChild(safeProbe);
@@ -1719,6 +1745,37 @@ function drawHud(){
   }
   g.globalAlpha=1;
   drawWifiIcon();
+  // Keep WiFi icon and add compact debug status line.
+  // Compact status line: show current place, time and active weather flags at top-center
+  // only show compact status when debugOverlayVisible is true (toggle with triple-'d')
+  if(debugOverlayVisible){
+    try{
+      g.save();
+      g.font = '600 '+Math.round(12*s)+'px system-ui,sans-serif';
+      const places = (window.BIOME_MODULE && window.BIOME_MODULE.PLACES) || [];
+      const timesArr = (window.BIOME_MODULE && window.BIOME_MODULE.TIMES) || [];
+      const curPlaceName = (curBiome && curBiome.place) ? (places.find(p=>p.id===curBiome.place)||{}).name || curBiome.place : (places[0]&&places[0].name)||'Place';
+      const curTimeName = (curBiome && curBiome.time) ? (timesArr.find(t=>t.id===curBiome.time)||{}).name || curBiome.time : (timesArr[0]&&timesArr[0].name)||'Time';
+      const wobj = (curBiome && curBiome.weather) || {};
+      const flags = [];
+      if(wobj.cloudy) flags.push('cloudy');
+      if(wobj.rain) flags.push('rain');
+      if(wobj.starsOn) flags.push('stars');
+      if(wobj.snowOn) flags.push('snow');
+      const flagsText = flags.length?('  '+flags.join(' ')) : '';
+      const text = curPlaceName + ' • ' + curTimeName + flagsText;
+      const textW = Math.ceil(g.measureText(text).width);
+      const pad2 = Math.round(8*s);
+      const boxW = textW + pad2*2;
+      const boxH = Math.round(12*s) + pad2;
+      const cx = Math.round(W*0.5 - boxW*0.5);
+      const cy = Math.round(pad + safeT + (API? Math.max(18,Math.round(22*s)) + 4 : 0));
+      g.globalAlpha = 0.36; g.fillStyle = '#000'; roundRect(cx-6, cy-6, boxW+12, boxH+12, 8); g.fill();
+      g.globalAlpha = 1; g.fillStyle = 'rgba(255,255,255,0.95)'; g.textAlign='center';
+      g.fillText(text, W*0.5, cy + Math.round(boxH*0.7));
+      g.restore();
+    }catch(e){/* non-fatal */}
+  }
 }
 
 function drawWifiIcon(){
@@ -1948,14 +2005,54 @@ function drawButton(b,key){
   g.textAlign='left';
   g.globalAlpha=1;
 }
-
-function drawOneTree(tx,baseY,kind,sc,dark){
+function drawOneTree(tx,baseY,kind,sc,dark, idx){
   g.globalAlpha=dark?0.55:0.7;
-  const col=dark?'#162e14':'#1e3a1a';
-  const col2=dark?'#1a3418':'#2a4a22';
+    const B=curBiome;
+    // Note: evening-variant overrides removed — BIOME_MODULE no longer exposes EVENING_VARIANTS
+  const col=dark?B.tree[0]:B.tree[1];
+  const col2=dark?B.tree[1]:B.tree[0];
   const h=(kind===0?110:kind===1?130:115)*sc;
-  // trunk
-  g.fillStyle=dark?'#1a2e16':'#2a4020';
+  // If this biome uses cacti, draw a cactus instead of the leafy tree
+  // WIP: cactus rendering — experimental shapes; refine later
+  if(B.cactus){
+    const w = 14*sc; // thicker cactus trunk
+    const colMain = col;
+    const colLight = col2;
+    // main column (rounded-cap)
+    g.fillStyle = colMain;
+    g.fillRect(tx - w*0.28, baseY - h*0.9 + 4, w*0.56, h*0.86);
+    g.beginPath(); g.ellipse(tx, baseY - h*0.9 + 4, w*0.48, w*0.48, 0, 0, TAU); g.fill();
+    // deterministic variant per tree index (idx) for stable shapes
+    const seed = (typeof idx === 'number') ? (idx*7919 + kind*97) : (Math.floor(baseY*13) + kind*97);
+    const rnd = (n)=> (Math.abs(Math.sin(seed + n*12.9898))*43758.5453) % 1;
+    // choose variant: 0 = both side columns, 1 = right only, 2 = left only
+    const variant = Math.floor(rnd(1)*3);
+    const sideW = Math.max(6, Math.round(w*0.6));
+    // left side column
+    if(variant===0 || variant===2){
+      const leftH = Math.round(h * (0.55 + rnd(2)*0.2));
+      const lx = tx - w*0.9;
+      g.fillStyle = colMain;
+      g.fillRect(lx - sideW*0.5, baseY - leftH, sideW, leftH);
+      g.beginPath(); g.ellipse(lx, baseY - leftH, sideW*0.52, sideW*0.52, 0, 0, TAU); g.fill();
+    }
+    // right side column
+    if(variant===0 || variant===1){
+      const rightH = Math.round(h * (0.45 + rnd(3)*0.28));
+      const rx = tx + w*0.9;
+      g.fillStyle = colMain;
+      g.fillRect(rx - sideW*0.5, baseY - rightH, sideW, rightH);
+      g.beginPath(); g.ellipse(rx, baseY - rightH, sideW*0.52, sideW*0.52, 0, 0, TAU); g.fill();
+    }
+    // subtle lighter highlight down the center of main trunk
+    g.globalAlpha = (dark?0.28:0.36);
+    g.fillStyle = colLight;
+    g.fillRect(tx - w*0.08, baseY - h*0.7, w*0.18, h*0.36);
+    g.globalAlpha = 1;
+    return;
+  }
+  // legacy tree drawing for non-desert biomes
+  g.fillStyle=B.trunk;
   g.fillRect(tx-3,baseY-h*0.05,6,h*0.3);
   if(kind===0){
     // Ellipse canopy
@@ -1992,7 +2089,7 @@ function drawTrees(layer){
       if(sx<-80||sx>W+80) continue;
       const kind=((i*13+7)%3)|0;
       const sc=0.8+(((i<0?-i:i)*7)%5)*0.12;
-      drawOneTree(sx,sy,kind,sc,true);
+      drawOneTree(sx,sy,kind,sc,true,i);
     }
   }else{
     // Background: parallax decorative trees
@@ -2005,7 +2102,7 @@ function drawTrees(layer){
       const kind=((i*13+7)%3);
       const by=yBase+Math.sin(i*1.3+0.5)*10+((i*11)%7)*2;
       const sc=0.8+((i*7)%5)*0.12;
-      drawOneTree(tx,by,kind,sc,false);
+      drawOneTree(tx,by,kind,sc,false,i);
     }
   }
 }
@@ -2094,40 +2191,55 @@ function tutBox(text,hb){
 }
 
 function render(){
-  // --- Sky gradient (3-stop, Alto-style) ---
+  const dist=Math.max(0,Math.floor((player.x-startX)/10));
+  // Select current biome based on player distance
+  curBiome = (window.BIOME_MODULE && window.BIOME_MODULE.getCurBiome) ? window.BIOME_MODULE.getCurBiome(dist) : curBiome;
+  const B=curBiome;
   const sky=g.createLinearGradient(0,0,0,H);
-  sky.addColorStop(0,'#4a90d9');
-  sky.addColorStop(0.55,'#8ec5e8');
-  sky.addColorStop(1,'#e8cfa0');
+  sky.addColorStop(0,B.sky[0]);
+  sky.addColorStop(0.55,B.sky[1]);
+  sky.addColorStop(1,B.sky[2]);
   g.fillStyle=sky;g.fillRect(0,0,W,H);
-
-  // --- Sun with glow ---
-  const sunX=W*0.72,sunY=H*0.18;
-  g.globalAlpha=0.18;g.fillStyle='#fff';
-  g.beginPath();g.arc(sunX,sunY,60,0,TAU);g.fill();
-  g.globalAlpha=0.35;
-  g.beginPath();g.arc(sunX,sunY,32,0,TAU);g.fill();
-  g.globalAlpha=0.9;
-  g.beginPath();g.arc(sunX,sunY,18,0,TAU);g.fill();
-  g.globalAlpha=1;
-
-  // --- Clouds ---
-  g.fillStyle='rgba(255,255,255,.13)';
+  if(B.stars>0.01){
+    g.fillStyle='#fff';
+    for(let i=0;i<35;i++){
+      g.globalAlpha=B.stars*(0.4+0.4*Math.sin(tNow*2+i*1.7));
+      g.beginPath();g.arc((i*137+29)%W,(i*97+13)%(H*0.6|0),0.5+((i*7)%3)*0.5,0,TAU);g.fill();
+    }
+    g.globalAlpha=1;
+  }
+  if(B.sun>0.05){
+    const sunX=W*0.72,sunY=H*0.18;
+    g.globalAlpha=0.18*B.sun;g.fillStyle='#fff';
+    g.beginPath();g.arc(sunX,sunY,60,0,TAU);g.fill();
+    g.globalAlpha=0.35*B.sun;
+    g.beginPath();g.arc(sunX,sunY,32,0,TAU);g.fill();
+    g.globalAlpha=0.9*B.sun;
+    g.beginPath();g.arc(sunX,sunY,18,0,TAU);g.fill();
+    g.globalAlpha=1;
+  }
+  if(B.moon>0.05){
+    const mx=W*0.25,my=H*0.15;
+    g.globalAlpha=0.1*B.moon;g.fillStyle='#c8d8f0';
+    g.beginPath();g.arc(mx,my,44,0,TAU);g.fill();
+    g.globalAlpha=0.85*B.moon;g.fillStyle='#e8eef8';
+    g.beginPath();g.arc(mx,my,18,0,TAU);g.fill();
+    g.globalAlpha=1;
+  }
+  g.fillStyle='rgba(255,255,255,'+B.cloud+')';
   for(let i=0;i<5;i++){
     const x=((i*260-(camX*0.08)%1300)+1300)%1300-120;
     const y=60+Math.sin(i*2.1+tNow*0.06)*20+i*12;
     g.beginPath();g.ellipse(x,y,66+i*8,18+i*2,0,0,TAU);g.fill();
   }
-
-  // --- Parallax mountain layers (back to front) ---
   const mLayers=[
-    {spd:0.04,base:0.52,amp:0.10,freq:0.0012,col:'#8da4b8',freq2:0.003,amp2:0.04},
-    {spd:0.10,base:0.56,amp:0.12,freq:0.0018,col:'#7a9478',freq2:0.005,amp2:0.03},
-    {spd:0.20,base:0.62,amp:0.13,freq:0.0025,col:'#5e7a4e',freq2:0.007,amp2:0.04}
+    {spd:0.04,base:0.52,amp:0.10,freq:0.0012,freq2:0.003,amp2:0.04},
+    {spd:0.10,base:0.56,amp:0.12,freq:0.0018,freq2:0.005,amp2:0.03},
+    {spd:0.20,base:0.62,amp:0.13,freq:0.0025,freq2:0.007,amp2:0.04}
   ];
   for(let L=0;L<mLayers.length;L++){
     const m=mLayers[L];
-    g.fillStyle=m.col;
+    g.fillStyle=B.mtn[L];
     g.beginPath();g.moveTo(0,H);
     for(let x=0;x<=W+30;x+=20){
       const wx=x+camX*m.spd;
@@ -2137,11 +2249,50 @@ function render(){
     }
     g.lineTo(W+30,H);g.closePath();g.fill();
   }
-
-  // --- Parallax trees (3 Alto types: ellipse, triangle, spade) ---
-  drawTrees(0); // background trees (behind terrain)
-
+  drawTrees(0);
   drawWorld();
+
+  // Snow overlay (simple blurred bokeh-like circles) when winter snow is active
+  if(B.weather && B.weather.snowOn){
+    // clear sand particles when snow starts so old sand doesn't linger
+    if(sandParticles.length>0) sandParticles.length=0;
+    // spawn a few fine flakes based on width (lower rate to reduce CPU)
+    const spawnRate = Math.max(1, Math.floor(W/240));
+    for(let s=0;s<spawnRate;s++){
+      if(Math.random()<0.16){
+        // small flakes, biased to near-top but not too many
+        snowParticles.push({x:Math.random()*W, y: -6 - Math.random()*40, r:1+Math.random()*2, vy:0.8+Math.random()*1.4});
+      }
+    }
+    // cap snow particle count to avoid slowdowns
+    if(snowParticles.length > 260) snowParticles.splice(0, snowParticles.length - 240);
+    // update & draw (draw after world so overlays appear on top)
+    g.save();
+    // draw small filled rectangles for flakes (cheaper than arc + blur)
+    for(let i=snowParticles.length-1;i>=0;i--){
+      const p=snowParticles[i];
+      p.y += p.vy;
+      p.x += Math.sin((tNow+p.y)*0.01)*0.35; // gentle horizontal drift
+      if(p.y>H+30) snowParticles.splice(i,1);
+      else{
+        const alpha = Math.min(0.9, 0.6*(p.r/3));
+        g.globalAlpha = alpha;
+        g.fillStyle = 'rgba(255,255,255,1)';
+        // draw as a 1-3px rectangle for cheap subpixel snow
+        const w = Math.max(1, Math.round(p.r));
+        const h = Math.max(1, Math.round(p.r*0.6));
+        g.fillRect(p.x, p.y, w, h);
+      }
+    }
+    g.globalAlpha = 1;
+    g.restore();
+
+  // Sandstorms removed: desert will no longer spawn sand particles or fog.
+  } else {
+    // clear arrays when neither snowing nor sandstorming
+    if(snowParticles.length>0) snowParticles.length=0;
+    if(sandParticles.length>0) sandParticles.length=0;
+  }
   drawParticles();
 
   if(mode!=='title') drawBuggy();
@@ -2439,6 +2590,16 @@ function keyDown(e){
     if(e.key==='Escape'){nameFocused=0;e.preventDefault();return;}
     e.preventDefault();return;
   }
+  // triple-'d' toggles compact status line (no other debug keys)
+  if(!nameFocused && (e.key==='d' || e.key==='D')){
+    try{
+      const now = (performance && performance.now)? performance.now() : Date.now();
+      if(now - debugKeySeqLast <= DEBUG_KEY_WINDOW) debugKeySeqCount++; else debugKeySeqCount = 1;
+      debugKeySeqLast = now;
+      if(debugKeySeqCount >= 3){ debugOverlayVisible = !debugOverlayVisible; debugKeySeqCount = 0; }
+    }catch(_){/* ignore */}
+    e.preventDefault(); return;
+  }
   // Leaderboard scroll
   if(mode==='over'&&wifiOn&&(e.key==='ArrowDown'||e.key==='ArrowUp')){
     lbScroll+=e.key==='ArrowDown'?1:-1;e.preventDefault();return;
@@ -2481,6 +2642,7 @@ function pointerDown(e){
       e.preventDefault();return;
     }
   }
+  
   if(mode==='title'){
     if(hitSkip(px,py)){
       startRunFromTitle();
